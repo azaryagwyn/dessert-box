@@ -259,7 +259,7 @@ app.post("/api/orders/checkout", async (c) => {
 
   if (serverKey && serverKey.startsWith("SB-Mid-server-") && !serverKey.includes("demo")) {
     try {
-      const midtransAuth = Buffer.from(`${serverKey}:`).toString("base64");
+      const midtransAuth = btoa(`${serverKey}:`);
       const midtransRes = await fetch("https://app.sandbox.midtrans.com/snap/v1/transactions", {
         method: "POST",
         headers: {
