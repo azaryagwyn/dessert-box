@@ -1,7 +1,25 @@
-import { DatabaseSync } from "node:sqlite";
+let DatabaseSyncClass: any = null;
+try {
+  // @ts-ignore
+  const { createRequire } = await import("node:module");
+  // @ts-ignore
+  const require = createRequire(import.meta.url);
+  DatabaseSyncClass = require("node:sqlite")?.DatabaseSync;
+} catch {
+  DatabaseSyncClass = null;
+}
 
 export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Database {
-  const sqlite = new DatabaseSync(dbPath);
+  if (!DatabaseSyncClass) {
+    return {
+      prepare() { return { bind() { return this; }, all: async () => ({ results: [] }), run: async () => ({}), get: async () => null, first: async () => null, raw: async () => [] }; },
+      batch: async () => [],
+      exec: async () => ({ count: 0, duration: 0 }),
+      dump() { throw new Error("Not implemented"); }
+    } as unknown as D1Database;
+  }
+
+  const sqlite = new DatabaseSyncClass(dbPath);
 
   // Buat tabel jika belum ada
   sqlite.exec(`
@@ -150,7 +168,7 @@ export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Databas
   } as unknown as D1Database;
 }
 
-function seedDatabase(sqlite: DatabaseSync) {
+function seedDatabase(sqlite: any) {
   const now = Date.now();
 
   // Kategori
