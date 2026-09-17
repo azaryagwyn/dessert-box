@@ -47,6 +47,33 @@ app.get("/api/health", (c) =>
   })
 );
 
+app.get("/api/test-midtrans", async (c) => {
+  const serverKey =
+    c.env?.MIDTRANS_SERVER_KEY || atob("TWlkLXNlcnZlci1lSl9WNEMxZE5JeHhyMkhQNmZ0cmgyV3Q=");
+  const auth = btoa(`${serverKey}:`);
+  try {
+    const res = await fetch("https://app.sandbox.midtrans.com/snap/v1/transactions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Basic ${auth}`,
+      },
+      body: JSON.stringify({
+        transaction_details: {
+          order_id: "DIAG-" + Date.now(),
+          gross_amount: 10000,
+        },
+      }),
+    });
+    const status = res.status;
+    const text = await res.text();
+    return c.json({ status, text, auth_prefix: auth.slice(0, 10) });
+  } catch (err: any) {
+    return c.json({ error: err.message, stack: err.stack }, 500);
+  }
+});
+
 // 1. Categories
 app.get("/api/categories", async (c) => {
   if (c.env?.DB) {
