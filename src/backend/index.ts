@@ -253,14 +253,19 @@ app.post("/api/orders/checkout", async (c) => {
   const orderId = `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const orderNumber = `DB-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // Snap Token Generation (Midtrans / Sandbox Simulation)
+  // Snap Token Generation (Midtrans Snap API)
   let snapToken = `SNAP-DEMO-${Date.now()}-${orderNumber}`;
   const serverKey = c.env.MIDTRANS_SERVER_KEY;
+  const isProduction = c.env.MIDTRANS_IS_PRODUCTION === "true" || (serverKey ? serverKey.startsWith("Mid-server-") : false);
 
-  if (serverKey && serverKey.startsWith("SB-Mid-server-") && !serverKey.includes("demo")) {
+  if (serverKey && !serverKey.includes("demo")) {
     try {
-      const midtransAuth = btoa(`${serverKey}:`);
-      const midtransRes = await fetch("https://app.sandbox.midtrans.com/snap/v1/transactions", {
+      const midtransAuth = Buffer.from(`${serverKey}:`).toString("base64");
+      const midtransEndpoint = isProduction
+        ? "https://app.midtrans.com/snap/v1/transactions"
+        : "https://app.sandbox.midtrans.com/snap/v1/transactions";
+
+      const midtransRes = await fetch(midtransEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -361,7 +366,7 @@ app.post("/api/orders/checkout", async (c) => {
     orderId,
     totalAmount,
     snapToken,
-    clientKey: c.env.MIDTRANS_CLIENT_KEY || "SB-Mid-client-demo",
+    clientKey: c.env.MIDTRANS_CLIENT_KEY || "Mid-client-2EeEfmUgvLiI7DKV",
   });
 });
 
