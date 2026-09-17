@@ -256,7 +256,7 @@ app.post("/api/orders/checkout", async (c) => {
   // Snap Token Generation (Midtrans Snap API)
   let snapToken = `SNAP-DEMO-${Date.now()}-${orderNumber}`;
   const serverKey = c.env.MIDTRANS_SERVER_KEY;
-  const isProduction = c.env.MIDTRANS_IS_PRODUCTION === "true" || (serverKey ? serverKey.startsWith("Mid-server-") : false);
+  const isProduction = c.env.MIDTRANS_IS_PRODUCTION === "true";
 
   if (serverKey && !serverKey.includes("demo")) {
     try {
