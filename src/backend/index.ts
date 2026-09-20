@@ -104,7 +104,7 @@ app.post("/api/auth/register", async (c) => {
   }>();
 
   if (!name || !email || !password) {
-    return c.json({ error: "Nama, email, dan kata sandi wajib diisi" }, 400);
+    return c.json({ error: "Nama, email / ID pengguna, dan kata sandi wajib diisi" }, 400);
   }
 
   if (password.length < 6) {
@@ -113,7 +113,7 @@ app.post("/api/auth/register", async (c) => {
 
   const cleanEmail = email.toLowerCase().trim();
 
-  // Cek duplikasi email
+  // Cek duplikasi email / username
   let existingUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
   if (c.env?.DB) {
     try {
@@ -124,7 +124,7 @@ app.post("/api/auth/register", async (c) => {
   }
 
   if (existingUser) {
-    return c.json({ error: "Email sudah terdaftar. Silakan gunakan menu Masuk / Login." }, 400);
+    return c.json({ error: "Email / ID pengguna sudah terdaftar. Silakan gunakan menu Masuk / Login." }, 400);
   }
 
   const passwordHash = await hashPassword(password);
@@ -186,7 +186,7 @@ app.post("/api/auth/login", async (c) => {
   }>();
 
   if (!email || !password) {
-    return c.json({ error: "Email dan kata sandi wajib diisi" }, 400);
+    return c.json({ error: "Email / ID pengguna dan kata sandi wajib diisi" }, 400);
   }
 
   const cleanEmail = email.toLowerCase().trim();
@@ -201,12 +201,12 @@ app.post("/api/auth/login", async (c) => {
   }
 
   if (!user) {
-    return c.json({ error: "Email atau kata sandi tidak cocok" }, 401);
+    return c.json({ error: "Email / ID pengguna atau kata sandi tidak cocok" }, 401);
   }
 
   const isMatch = await verifyPassword(password, user.passwordHash);
   if (!isMatch) {
-    return c.json({ error: "Email atau kata sandi tidak cocok" }, 401);
+    return c.json({ error: "Email / ID pengguna atau kata sandi tidak cocok" }, 401);
   }
 
   const token = await createAuthToken({
@@ -650,6 +650,13 @@ app.post("/api/orders/checkout", async (c) => {
         ? "https://app.midtrans.com/snap/v1/transactions"
         : "https://app.sandbox.midtrans.com/snap/v1/transactions";
 
+      const safeMidtransEmail =
+        body.customerEmail && body.customerEmail.includes("@")
+          ? body.customerEmail
+          : `${(body.customerEmail || body.customerName || "customer")
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "") || "customer"}@customer.sweetlayers.my.id`;
+
       const midtransRes = await fetch(midtransEndpoint, {
         method: "POST",
         headers: {
@@ -665,7 +672,7 @@ app.post("/api/orders/checkout", async (c) => {
           customer_details: {
             first_name: body.customerName,
             phone: body.customerPhone,
-            email: body.customerEmail || "customer@sweetlayers.com",
+            email: safeMidtransEmail,
           },
           item_details: [
             ...processedItems.map((pi) => ({

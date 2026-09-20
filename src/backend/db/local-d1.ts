@@ -190,16 +190,6 @@ function seedUsers(sqlite: DatabaseSync) {
     "admin",
     1726500000000
   );
-
-  insertUser.run(
-    "usr_cust_1",
-    "Jessica Angeline",
-    "customer@sweetlayers.com",
-    "081234567891",
-    "630f9b10c486621cbf4a30d39cfa86379fbb87f7cc78547ed2884ae435a6a023", // Customer123!
-    "customer",
-    1726500000000
-  );
 }
 
 function seedDatabase(sqlite: DatabaseSync) {

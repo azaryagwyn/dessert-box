@@ -137,7 +137,6 @@ INSERT OR IGNORE INTO promotions (id, code, title, description, discount_type, d
 ('pr2', 'DESSERT10K', 'Potongan Rp 10.000 Weekend Treat', 'Potongan langsung Rp 10.000 dengan minimal belanja Rp 75.000.', 'fixed', 10000, 75000, 10000, 100, 0, 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=1200&q=80', 1, 1),
 ('pr3', 'ONGKIRHEMAT', 'Gratis / Subsidi Ongkir Rp 15.000', 'Subsidi ongkir kurir instan/sameday Rp 15.000 dengan minimal order Rp 90.000.', 'fixed', 15000, 90000, 15000, 150, 0, NULL, 0, 1);
 
--- Seed Initial Users (Admin & Customer)
+-- Seed Initial Admin User
 INSERT OR IGNORE INTO users (id, name, email, phone, password_hash, role, created_at) VALUES
-('usr_admin_1', 'Admin SweetLayers', 'admin@sweetlayers.com', '081234567890', '02f34e4e6b5351afc6ab1163a31aca891937556501c12323ff77d72dbe537543', 'admin', 1726500000000),
-('usr_cust_1', 'Jessica Angeline', 'customer@sweetlayers.com', '081234567891', '630f9b10c486621cbf4a30d39cfa86379fbb87f7cc78547ed2884ae435a6a023', 'customer', 1726500000000);
+('usr_admin_1', 'Admin SweetLayers', 'admin@sweetlayers.com', '081234567890', '02f34e4e6b5351afc6ab1163a31aca891937556501c12323ff77d72dbe537543', 'admin', 1726500000000);

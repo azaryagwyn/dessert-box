@@ -74,16 +74,11 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  const fillQuickAccount = (type: "admin" | "customer") => {
+  const fillAdminAccount = () => {
     setAuthModalMode("login");
     setErrorMessage("");
-    if (type === "admin") {
-      setLoginEmail("admin@sweetlayers.com");
-      setLoginPassword("AdminSweetLayers2026!");
-    } else {
-      setLoginEmail("customer@sweetlayers.com");
-      setLoginPassword("Customer123!");
-    }
+    setLoginEmail("admin@sweetlayers.com");
+    setLoginPassword("AdminSweetLayers2026!");
   };
 
   return (
@@ -104,7 +99,7 @@ export const AuthModal: React.FC = () => {
           </div>
           <h2 className="text-xl font-bold">SweetLayers Account</h2>
           <p className="text-xs text-white/90 mt-1">
-            Masuk untuk lacak pesanan, kelola promo, atau kelola toko
+            Daftar akun customer baru atau masuk untuk lacak pesanan
           </p>
         </div>
 
@@ -151,42 +146,33 @@ export const AuthModal: React.FC = () => {
             </div>
           )}
 
-          {/* Quick Demo Fillers */}
-          <div className="mb-5 bg-pink-50/60 border border-pink-100 rounded-xl p-3">
-            <div className="text-[11px] font-semibold text-pink-900 mb-1.5 flex items-center gap-1">
-              <span>⚡</span> Demo Quick Fill (1-Klik):
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => fillQuickAccount("customer")}
-                className="px-2.5 py-1.5 bg-white border border-pink-200 hover:border-pink-400 hover:bg-pink-50 text-pink-700 rounded-lg text-left transition font-medium"
-              >
-                👤 Akun Customer
-                <span className="block text-[10px] text-gray-400 font-normal">customer@sweetlayers.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillQuickAccount("admin")}
-                className="px-2.5 py-1.5 bg-white border border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-700 rounded-lg text-left transition font-medium"
-              >
-                👑 Akun Admin
-                <span className="block text-[10px] text-gray-400 font-normal">admin@sweetlayers.com</span>
-              </button>
-            </div>
+          {/* Quick Admin Demo Fill */}
+          <div className="mb-4 bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+            <span className="text-[11px] text-slate-600 flex items-center gap-1">
+              <span>👑</span> Akun Khusus Pengelola / Admin:
+            </span>
+            <button
+              type="button"
+              onClick={fillAdminAccount}
+              className="px-2.5 py-1 bg-white border border-slate-300 hover:border-purple-400 hover:bg-purple-50 text-purple-700 rounded-lg font-medium transition text-[11px]"
+            >
+              Isi Akun Admin (1-Klik)
+            </button>
           </div>
 
           {/* LOGIN FORM */}
           {authModalMode === "login" && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Email atau Username
+                </label>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="nama@email.com"
+                  placeholder="Contoh: budi atau budi@mail.com"
                   className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition"
                 />
               </div>
@@ -239,19 +225,24 @@ export const AuthModal: React.FC = () => {
                   required
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
-                  placeholder="Contoh: Jessica Angeline"
+                  placeholder="Contoh: Budi Santoso"
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Alamat Email</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-0.5">
+                  Email atau Username Unik
+                </label>
+                <p className="text-[10px] text-gray-400 mb-1">
+                  Bebas, tidak wajib email asli (bisa username apa saja, contoh: budi123, budi@mail, dsb)
+                </p>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="jessica@example.com"
+                  placeholder="Masukkan email atau username unik"
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition"
                 />
               </div>
