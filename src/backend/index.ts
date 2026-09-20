@@ -180,9 +180,10 @@ app.post("/api/auth/register", async (c) => {
 
 // Login (Customer & Admin)
 app.post("/api/auth/login", async (c) => {
-  const { email, password } = await c.req.json<{
+  const { email, password, syncProfile } = await c.req.json<{
     email?: string;
     password?: string;
+    syncProfile?: { name: string; phone?: string };
   }>();
 
   if (!email || !password) {
@@ -198,6 +199,27 @@ app.post("/api/auth/login", async (c) => {
       const uDb = await db.select().from(schema.users).where(eq(schema.users.email, cleanEmail)).get();
       if (uDb) user = uDb;
     } catch (e) {}
+  }
+
+  if (!user && syncProfile && syncProfile.name) {
+    const passwordHash = await hashPassword(password);
+    const userId = `usr_cust_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    user = {
+      id: userId,
+      name: syncProfile.name.trim(),
+      email: cleanEmail,
+      phone: (syncProfile.phone || "").trim(),
+      passwordHash,
+      role: "customer" as const,
+      createdAt: Date.now(),
+    };
+    memoryUsers.push(user);
+    if (c.env?.DB) {
+      try {
+        const db = drizzle(c.env.DB, { schema });
+        await db.insert(schema.users).values(user);
+      } catch (_) {}
+    }
   }
 
   if (!user) {

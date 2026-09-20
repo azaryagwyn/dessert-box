@@ -138,15 +138,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
+      const cleanEmail = email.toLowerCase().trim();
+
+      // Cari backup profil lokal jika customer pernah mendaftar di perangkat ini
+      let syncProfile: { name: string; phone?: string } | undefined = undefined;
+      try {
+        const backupStr = localStorage.getItem("sweetlayers_registered_account");
+        if (backupStr) {
+          const backup = JSON.parse(backupStr);
+          if (backup.email === cleanEmail) {
+            syncProfile = { name: backup.name, phone: backup.phone };
+          }
+        }
+      } catch (_) {}
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: cleanEmail, password, syncProfile }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        return { success: false, message: data.error || "Gagal masuk. Periksa email dan password." };
+        return { success: false, message: data.error || "Gagal masuk. Periksa email / username dan password." };
       }
 
       setToken(data.token);
@@ -168,16 +182,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string;
   }): Promise<{ success: boolean; message?: string }> => {
     try {
+      const cleanEmail = data.email.toLowerCase().trim();
+      const payload = {
+        name: data.name.trim(),
+        email: cleanEmail,
+        phone: data.phone?.trim() || "",
+        password: data.password,
+      };
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       const resData = await res.json();
       if (!res.ok || !resData.success) {
         return { success: false, message: resData.error || "Gagal mendaftar akun baru." };
       }
+
+      // Simpan backup akun customer di perangkat lokal
+      try {
+        localStorage.setItem(
+          "sweetlayers_registered_account",
+          JSON.stringify({
+            name: payload.name,
+            email: payload.email,
+            phone: payload.phone,
+          })
+        );
+      } catch (_) {}
 
       setToken(resData.token);
       setUser(resData.user);
