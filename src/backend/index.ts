@@ -28,6 +28,7 @@ type Bindings = {
 
 // In-memory fallback state if D1 is not yet bound on Cloudflare Pages
 let memoryUsers = [...DEFAULT_USERS];
+let memoryProducts = [...DEFAULT_PRODUCTS];
 let memoryOrders: any[] = [];
 let memoryVariants = [...DEFAULT_VARIANTS];
 let memoryPromotions = [...DEFAULT_PROMOTIONS];
@@ -339,7 +340,7 @@ app.get("/api/products", async (c) => {
   const category = c.req.query("category");
   const search = c.req.query("search");
 
-  let productList: any[] = DEFAULT_PRODUCTS;
+  let productList: any[] = memoryProducts;
   let allVariants: any[] = memoryVariants;
 
   if (c.env?.DB) {
@@ -1065,6 +1066,35 @@ app.patch("/api/admin/variants/:id/stock", async (c) => {
   }
 
   return c.json({ success: true, variantId, newStock: stock });
+});
+
+// 12b. Admin Update Product Image (Save custom photo to database)
+app.patch("/api/admin/products/:id/image", async (c) => {
+  const productId = c.req.param("id");
+  const { imageUrl } = await c.req.json<{ imageUrl: string }>();
+
+  if (!imageUrl) {
+    return c.json({ error: "imageUrl wajib disertakan" }, 400);
+  }
+
+  const idx = memoryProducts.findIndex((p) => p.id === productId);
+  if (idx > -1) {
+    memoryProducts[idx].imageUrl = imageUrl;
+  }
+
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      await db
+        .update(schema.products)
+        .set({ imageUrl })
+        .where(eq(schema.products.id, productId));
+    } catch (e) {
+      console.warn("D1 update product image error:", e);
+    }
+  }
+
+  return c.json({ success: true, productId, imageUrl });
 });
 
 // ==========================================

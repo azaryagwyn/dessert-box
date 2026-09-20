@@ -16,6 +16,10 @@ import {
   ShieldAlert,
   Send,
   Lock,
+  Upload,
+  Camera,
+  Link2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Product, Order } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -49,6 +53,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
   const [isSavingStock, setIsSavingStock] = useState<string | null>(null);
   const [stockSuccessMsg, setStockSuccessMsg] = useState<string | null>(null);
 
+  // Image Upload state
+  const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
+  const [imageSuccessMsg, setImageSuccessMsg] = useState<string | null>(null);
+  const [editingImageUrlId, setEditingImageUrlId] = useState<string | null>(null);
+  const [customImageUrlInput, setCustomImageUrlInput] = useState("");
+
   // Proxy state
   const [proxyOrderId, setProxyOrderId] = useState("");
   const [proxyLoading, setProxyLoading] = useState(false);
@@ -56,6 +66,92 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
   const [proxyCustomUrl, setProxyCustomUrl] = useState("https://api.sandbox.midtrans.com/v2/token");
   const [proxyFetchLoading, setProxyFetchLoading] = useState(false);
   const [proxyFetchResult, setProxyFetchResult] = useState<any>(null);
+
+  // Handler for uploading product photo from device (auto-compressed to clean WebP/JPEG)
+  const handleImageFileUpload = async (productId: string, file: File) => {
+    if (!file) return;
+    setUploadingProductId(productId);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const img = new window.Image();
+        img.onload = async () => {
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to efficient JPEG Data URL
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+          // Save to backend database
+          const res = await authFetch(`/api/admin/products/${productId}/image`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: compressedDataUrl }),
+          });
+
+          if (res.ok) {
+            setProducts((prev) =>
+              prev.map((p) => (p.id === productId ? { ...p, imageUrl: compressedDataUrl } : p))
+            );
+            setImageSuccessMsg("Foto produk berhasil diunggah & disimpan ke database!");
+            setTimeout(() => setImageSuccessMsg(null), 3500);
+            onRefreshData();
+          } else {
+            alert("Gagal menyimpan foto ke database.");
+          }
+          setUploadingProductId(null);
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert("Error saat membaca file foto: " + err.message);
+      setUploadingProductId(null);
+    }
+  };
+
+  const handleSaveCustomImageUrl = async (productId: string) => {
+    if (!customImageUrlInput.trim()) return;
+    setUploadingProductId(productId);
+    try {
+      const res = await authFetch(`/api/admin/products/${productId}/image`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: customImageUrlInput.trim() }),
+      });
+
+      if (res.ok) {
+        setProducts((prev) =>
+          prev.map((p) => (p.id === productId ? { ...p, imageUrl: customImageUrlInput.trim() } : p))
+        );
+        setImageSuccessMsg("Path / URL foto produk berhasil diperbarui di database!");
+        setTimeout(() => setImageSuccessMsg(null), 3500);
+        setEditingImageUrlId(null);
+        setCustomImageUrlInput("");
+        onRefreshData();
+      }
+    } catch (err: any) {
+      alert("Gagal memperbarui URL foto: " + err.message);
+    } finally {
+      setUploadingProductId(null);
+    }
+  };
 
   // Quick admin login state
   const [adminLoggingIn, setAdminLoggingIn] = useState(false);
@@ -342,7 +438,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
           }`}
         >
           <Boxes className="w-4 h-4" />
-          <span>Update Stok Dapur Realtime</span>
+          <span>Kelola Menu, Foto & Stok Dapur</span>
         </button>
 
         <button
@@ -363,6 +459,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
         <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
           <CheckCircle className="w-4 h-4 text-emerald-400" />
           <span>{stockSuccessMsg}</span>
+        </div>
+      )}
+
+      {imageSuccessMsg && (
+        <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <span>{imageSuccessMsg}</span>
         </div>
       )}
 
@@ -503,26 +606,125 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
         </div>
       )}
 
-      {/* TAB 2: STOCK MANAGEMENT */}
+      {/* TAB 2: MENU, PHOTOS & STOCK MANAGEMENT */}
       {activeTab === "stock" && (
         <div className="space-y-4">
+          {/* Info Card on Photo Management */}
+          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/60 flex items-start gap-3">
+            <div className="p-2 bg-amber-900/80 rounded-xl text-amber-300 flex-shrink-0">
+              <ImageIcon className="w-5 h-5" />
+            </div>
+            <div className="text-xs space-y-1">
+              <h4 className="font-bold text-amber-200">
+                🖼️ Manajemen Aset Foto Menu Asli Toko
+              </h4>
+              <p className="text-amber-300/90 leading-relaxed">
+                Anda dapat mengganti foto menu dummy dengan foto asli buatan Anda. Klik tombol <strong>"Unggah Foto"</strong> untuk memilih file gambar dari laptop/HP (otomatis dioptimasi dan disimpan ke database), atau gunakan tombol rantai <strong>(🔗)</strong> untuk memasukkan path file lokal (misalnya <code className="bg-amber-900/80 px-1 py-0.5 rounded text-amber-200">/images/products/foto-anda.jpg</code>).
+              </p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {products.map((p) => (
               <div
                 key={p.id}
                 className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-3"
               >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="w-12 h-12 rounded-xl object-cover border border-slate-700"
-                  />
-                  <div>
-                    <h4 className="font-bold text-sm text-white">{p.name}</h4>
-                    <span className="text-[11px] text-slate-400">Total Stok: {p.totalStock} box</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative group flex-shrink-0">
+                      <img
+                        src={p.imageUrl}
+                        alt={p.name}
+                        className="w-14 h-14 rounded-xl object-cover border border-slate-700 shadow-sm"
+                      />
+                      <label
+                        className="absolute inset-0 bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition text-[10px] text-white font-medium"
+                        title="Klik untuk ganti foto dari file di laptop/HP"
+                      >
+                        <Camera className="w-4 h-4 mb-0.5" />
+                        <span>Ganti</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageFileUpload(p.id, file);
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-white">{p.name}</h4>
+                      <span className="text-[11px] text-slate-400">Total Stok: {p.totalStock} box</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <label
+                      className="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5"
+                      title="Unggah foto asli Anda dari perangkat"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">
+                        {uploadingProductId === p.id ? "Menyimpan..." : "Unggah Foto"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingProductId === p.id}
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImageFileUpload(p.id, file);
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editingImageUrlId === p.id) {
+                          setEditingImageUrlId(null);
+                        } else {
+                          setEditingImageUrlId(p.id);
+                          setCustomImageUrlInput(p.imageUrl);
+                        }
+                      }}
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 rounded-xl text-xs transition"
+                      title="Ubah path file lokal atau URL"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
+
+                {/* Custom Path/URL Editor */}
+                {editingImageUrlId === p.id && (
+                  <div className="p-2.5 bg-slate-900/90 rounded-xl border border-slate-700 text-xs space-y-2 animate-fade-in">
+                    <label className="block text-[11px] text-slate-300 font-semibold">
+                      Masukkan Path Aset Lokal atau URL Foto:
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customImageUrlInput}
+                        onChange={(e) => setCustomImageUrlInput(e.target.value)}
+                        placeholder="Contoh: /images/products/foto.jpg"
+                        className="flex-1 px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono text-[11px] focus:outline-none focus:border-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveCustomImageUrl(p.id)}
+                        disabled={uploadingProductId === p.id || !customImageUrlInput.trim()}
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition"
+                      >
+                        Simpan
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Variants stock list */}
                 <div className="space-y-2 pt-2 border-t border-slate-700/60">
