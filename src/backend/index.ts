@@ -8,19 +8,35 @@ import {
   DEFAULT_PRODUCTS,
   DEFAULT_VARIANTS,
   DEFAULT_PROMOTIONS,
+  DEFAULT_USERS,
 } from "./db/initial-data";
+import {
+  hashPassword,
+  verifyPassword,
+  createAuthToken,
+  verifyAuthToken,
+  extractBearerToken,
+} from "./auth/crypto";
 
 type Bindings = {
   DB?: D1Database;
   MIDTRANS_SERVER_KEY?: string;
   MIDTRANS_CLIENT_KEY?: string;
   MIDTRANS_IS_PRODUCTION?: string;
+  JWT_SECRET?: string;
 };
 
 // In-memory fallback state if D1 is not yet bound on Cloudflare Pages
+let memoryUsers = [...DEFAULT_USERS];
 let memoryOrders: any[] = [];
 let memoryVariants = [...DEFAULT_VARIANTS];
 let memoryPromotions = [...DEFAULT_PROMOTIONS];
+
+async function getAuthenticatedUser(c: any) {
+  const token = extractBearerToken(c.req.header("Authorization"));
+  if (!token) return null;
+  return await verifyAuthToken(token);
+}
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -72,6 +88,214 @@ app.get("/api/test-midtrans", async (c) => {
   } catch (err: any) {
     return c.json({ error: err.message, stack: err.stack }, 500);
   }
+});
+
+// ==========================================
+// AUTHENTICATION & CUSTOMER ACCOUNT
+// ==========================================
+
+// Register Customer
+app.post("/api/auth/register", async (c) => {
+  const { name, email, phone, password } = await c.req.json<{
+    name?: string;
+    email?: string;
+    phone?: string;
+    password?: string;
+  }>();
+
+  if (!name || !email || !password) {
+    return c.json({ error: "Nama, email, dan kata sandi wajib diisi" }, 400);
+  }
+
+  if (password.length < 6) {
+    return c.json({ error: "Kata sandi minimal 6 karakter" }, 400);
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  // Cek duplikasi email
+  let existingUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const uDb = await db.select().from(schema.users).where(eq(schema.users.email, cleanEmail)).get();
+      if (uDb) existingUser = uDb;
+    } catch (e) {}
+  }
+
+  if (existingUser) {
+    return c.json({ error: "Email sudah terdaftar. Silakan gunakan menu Masuk / Login." }, 400);
+  }
+
+  const passwordHash = await hashPassword(password);
+  const userId = `usr_cust_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newUser = {
+    id: userId,
+    name: name.trim(),
+    email: cleanEmail,
+    phone: (phone || "").trim(),
+    passwordHash,
+    role: "customer" as const,
+    createdAt: Date.now(),
+  };
+
+  memoryUsers.push(newUser);
+
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      await db.insert(schema.users).values({
+        id: userId,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+        passwordHash: newUser.passwordHash,
+        role: newUser.role,
+        createdAt: newUser.createdAt,
+      });
+    } catch (e) {
+      console.warn("D1 insert user failed:", e);
+    }
+  }
+
+  const token = await createAuthToken({
+    userId: newUser.id,
+    email: newUser.email,
+    name: newUser.name,
+    role: newUser.role,
+  });
+
+  return c.json({
+    success: true,
+    token,
+    user: {
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      phone: newUser.phone,
+      role: newUser.role,
+    },
+  });
+});
+
+// Login (Customer & Admin)
+app.post("/api/auth/login", async (c) => {
+  const { email, password } = await c.req.json<{
+    email?: string;
+    password?: string;
+  }>();
+
+  if (!email || !password) {
+    return c.json({ error: "Email dan kata sandi wajib diisi" }, 400);
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  let user = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const uDb = await db.select().from(schema.users).where(eq(schema.users.email, cleanEmail)).get();
+      if (uDb) user = uDb;
+    } catch (e) {}
+  }
+
+  if (!user) {
+    return c.json({ error: "Email atau kata sandi tidak cocok" }, 401);
+  }
+
+  const isMatch = await verifyPassword(password, user.passwordHash);
+  if (!isMatch) {
+    return c.json({ error: "Email atau kata sandi tidak cocok" }, 401);
+  }
+
+  const token = await createAuthToken({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role as "admin" | "customer",
+  });
+
+  return c.json({
+    success: true,
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+    },
+  });
+});
+
+// Profile / Current User
+app.get("/api/auth/me", async (c) => {
+  const auth = await getAuthenticatedUser(c);
+  if (!auth) {
+    return c.json({ error: "Sesi telah berakhir atau belum login" }, 401);
+  }
+
+  let user = memoryUsers.find((u) => u.id === auth.userId);
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const uDb = await db.select().from(schema.users).where(eq(schema.users.id, auth.userId)).get();
+      if (uDb) user = uDb;
+    } catch (e) {}
+  }
+
+  return c.json({
+    user: {
+      id: auth.userId,
+      name: user?.name || auth.name,
+      email: user?.email || auth.email,
+      phone: user?.phone || "",
+      role: user?.role || auth.role,
+    },
+  });
+});
+
+// Customer Orders History
+app.get("/api/customer/orders", async (c) => {
+  const auth = await getAuthenticatedUser(c);
+  if (!auth) {
+    return c.json({ error: "Silakan login terlebih dahulu" }, 401);
+  }
+
+  let orders: any[] = [];
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const oList = await db
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.customerEmail, auth.email))
+        .orderBy(desc(schema.orders.createdAt))
+        .all();
+
+      for (const o of oList) {
+        const items = await db
+          .select()
+          .from(schema.orderItems)
+          .where(eq(schema.orderItems.orderId, o.id))
+          .all();
+        orders.push({ ...o, items });
+      }
+    } catch (e) {
+      console.warn("D1 get customer orders failed:", e);
+    }
+  }
+
+  if (orders.length === 0) {
+    orders = memoryOrders.filter(
+      (o) =>
+        (o.customerId && o.customerId === auth.userId) ||
+        (o.customerEmail && o.customerEmail.toLowerCase() === auth.email.toLowerCase())
+    );
+  }
+
+  return c.json(orders);
 });
 
 // 1. Categories
@@ -282,6 +506,7 @@ app.post("/api/promotions/validate", async (c) => {
 // 6. Checkout Order
 app.post("/api/orders/checkout", async (c) => {
   const body = await c.req.json<{
+    customerId?: string;
     customerName: string;
     customerPhone: string;
     customerEmail: string;
@@ -297,6 +522,9 @@ app.post("/api/orders/checkout", async (c) => {
       quantity: number;
     }[];
   }>();
+
+  const authUser = await getAuthenticatedUser(c);
+  const customerId = authUser?.userId || body.customerId || null;
 
   if (!body.items || body.items.length === 0) {
     return c.json({ error: "Keranjang belanja masih kosong" }, 400);
@@ -488,6 +716,7 @@ app.post("/api/orders/checkout", async (c) => {
   const orderRecord = {
     id: orderId,
     orderNumber,
+    customerId,
     customerName: body.customerName,
     customerPhone: body.customerPhone,
     customerEmail: body.customerEmail || "",
@@ -515,6 +744,7 @@ app.post("/api/orders/checkout", async (c) => {
       await db.insert(schema.orders).values({
         id: orderId,
         orderNumber,
+        customerId,
         customerName: body.customerName,
         customerPhone: body.customerPhone,
         customerEmail: body.customerEmail || "",
@@ -713,25 +943,75 @@ app.post("/api/payment/webhook", async (c) => {
   return c.json({ status: "ok" });
 });
 
+// ==========================================
+// ADMIN MIDDLEWARE & MANAGEMENT
+// ==========================================
+
+// Guard: Hanya admin yang boleh akses /api/admin/*
+app.use("/api/admin/*", async (c, next) => {
+  const auth = await getAuthenticatedUser(c);
+  if (!auth || auth.role !== "admin") {
+    return c.json({ error: "Akses ditolak: Diperlukan hak akses Admin" }, 403);
+  }
+  await next();
+});
+
 // 10. Admin Stats
 app.get("/api/admin/stats", async (c) => {
-  const totalRevenue = memoryOrders
+  let orders = memoryOrders;
+  let variants = memoryVariants;
+
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const oDb = await db.select().from(schema.orders).all();
+      const vDb = await db.select().from(schema.productVariants).all();
+      if (oDb && oDb.length > 0) orders = oDb;
+      if (vDb && vDb.length > 0) variants = vDb;
+    } catch (e) {}
+  }
+
+  const totalRevenue = orders
     .filter((o) => o.status !== "pending" && o.status !== "cancelled")
     .reduce((acc, curr) => acc + curr.totalAmount, 0);
 
   return c.json({
     totalRevenue,
-    totalOrders: memoryOrders.length,
-    pendingOrders: memoryOrders.filter((o) => o.status === "pending").length,
-    processingOrders: memoryOrders.filter((o) => o.status === "paid").length,
-    completedOrders: memoryOrders.filter((o) => o.status === "completed").length,
-    lowStockCount: memoryVariants.filter((v) => v.stock > 0 && v.stock <= 5).length,
-    outOfStockCount: memoryVariants.filter((v) => v.stock === 0).length,
+    totalOrders: orders.length,
+    pendingOrders: orders.filter((o) => o.status === "pending").length,
+    processingOrders: orders.filter((o) => o.status === "paid").length,
+    completedOrders: orders.filter((o) => o.status === "completed").length,
+    lowStockCount: variants.filter((v) => v.stock > 0 && v.stock <= 5).length,
+    outOfStockCount: variants.filter((v) => v.stock === 0).length,
   });
 });
 
 // 11. Admin Orders
 app.get("/api/admin/orders", async (c) => {
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const oDb = await db
+        .select()
+        .from(schema.orders)
+        .orderBy(desc(schema.orders.createdAt))
+        .all();
+
+      const ordersWithItems = [];
+      for (const ord of oDb) {
+        const items = await db
+          .select()
+          .from(schema.orderItems)
+          .where(eq(schema.orderItems.orderId, ord.id))
+          .all();
+        ordersWithItems.push({ ...ord, items });
+      }
+      if (ordersWithItems.length > 0) return c.json(ordersWithItems);
+    } catch (e) {
+      console.warn("D1 admin orders query error:", e);
+    }
+  }
+
   return c.json(memoryOrders);
 });
 
@@ -756,6 +1036,120 @@ app.patch("/api/admin/variants/:id/stock", async (c) => {
   }
 
   return c.json({ success: true, variantId, newStock: stock });
+});
+
+// ==========================================
+// PROXY SERVER MODULE
+// ==========================================
+
+// 13. Midtrans Transaction Status Proxy (Enforces backend-only Server Key & CORS-safe)
+app.post("/api/proxy/midtrans/status", async (c) => {
+  const { orderId } = await c.req.json<{ orderId: string }>();
+  if (!orderId) {
+    return c.json({ error: "Parameter orderId wajib disertakan" }, 400);
+  }
+
+  const serverKey =
+    c.env?.MIDTRANS_SERVER_KEY || atob("TWlkLXNlcnZlci1lSl9WNEMxZE5JeHhyMkhQNmZ0cmgyV3Q=");
+  const isProduction = c.env?.MIDTRANS_IS_PRODUCTION === "true";
+  const auth = btoa(`${serverKey}:`);
+  const baseUrl = isProduction
+    ? "https://api.midtrans.com/v2"
+    : "https://api.sandbox.midtrans.com/v2";
+
+  try {
+    const res = await fetch(`${baseUrl}/${encodeURIComponent(orderId)}/status`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Basic ${auth}`,
+      },
+    });
+    const data = await res.json();
+    return c.json(data, res.status as any);
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menghubungi Midtrans Proxy" }, 500);
+  }
+});
+
+// 14. Midtrans Transaction Cancel Proxy (Admin Only)
+app.post("/api/proxy/midtrans/cancel", async (c) => {
+  const auth = await getAuthenticatedUser(c);
+  if (!auth || auth.role !== "admin") {
+    return c.json({ error: "Hanya akun Admin yang dapat membatalkan transaksi Midtrans" }, 403);
+  }
+
+  const { orderId } = await c.req.json<{ orderId: string }>();
+  if (!orderId) {
+    return c.json({ error: "Parameter orderId wajib disertakan" }, 400);
+  }
+
+  const serverKey =
+    c.env?.MIDTRANS_SERVER_KEY || atob("TWlkLXNlcnZlci1lSl9WNEMxZE5JeHhyMkhQNmZ0cmgyV3Q=");
+  const isProduction = c.env?.MIDTRANS_IS_PRODUCTION === "true";
+  const basicAuth = btoa(`${serverKey}:`);
+  const baseUrl = isProduction
+    ? "https://api.midtrans.com/v2"
+    : "https://api.sandbox.midtrans.com/v2";
+
+  try {
+    const res = await fetch(`${baseUrl}/${encodeURIComponent(orderId)}/cancel`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Basic ${basicAuth}`,
+      },
+    });
+    const data = await res.json();
+    return c.json(data, res.status as any);
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menghubungi Midtrans Proxy" }, 500);
+  }
+});
+
+// 15. General Safe Outbound Proxy (Routing external courier/logistics/webhook services)
+app.post("/api/proxy/fetch", async (c) => {
+  const { url, method = "GET", headers = {}, body } = await c.req.json<{
+    url: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: any;
+  }>();
+
+  if (!url || (!url.startsWith("https://") && !url.startsWith("http://"))) {
+    return c.json({ error: "URL yang valid (http/https) wajib disertakan" }, 400);
+  }
+
+  try {
+    const fetchOptions: RequestInit = {
+      method,
+      headers: {
+        ...headers,
+        "User-Agent": "SweetLayers-Proxy/1.0",
+      },
+    };
+
+    if (body && method !== "GET" && method !== "HEAD") {
+      fetchOptions.body = typeof body === "string" ? body : JSON.stringify(body);
+    }
+
+    const res = await fetch(url, fetchOptions);
+    const contentType = res.headers.get("content-type") || "";
+    let responseData: any;
+    if (contentType.includes("application/json")) {
+      responseData = await res.json();
+    } else {
+      responseData = await res.text();
+    }
+
+    return c.json({
+      status: res.status,
+      statusText: res.statusText,
+      data: responseData,
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal melakukan proxy request" }, 500);
+  }
 });
 
 export default app;

@@ -1,15 +1,44 @@
-import React from "react";
-import { ShoppingBag, Sparkles, LayoutDashboard, Utensils, Heart } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import {
+  ShoppingBag,
+  Sparkles,
+  LayoutDashboard,
+  Utensils,
+  Heart,
+  User as UserIcon,
+  LogOut,
+  PackageCheck,
+  ChevronDown,
+} from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 
 interface NavbarProps {
   isAdminOpen: boolean;
   setIsAdminOpen: (open: boolean) => void;
   onSelectCategory?: (slug: string) => void;
+  onOpenOrders: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ isAdminOpen, setIsAdminOpen }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  isAdminOpen,
+  setIsAdminOpen,
+  onOpenOrders,
+}) => {
   const { totalItemCount, setIsCartOpen } = useCart();
+  const { user, isAuthenticated, isAdmin, openLogin, logout } = useAuth();
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-orange-100 shadow-sm transition-all">
@@ -55,19 +84,111 @@ export const Navbar: React.FC<NavbarProps> = ({ isAdminOpen, setIsAdminOpen }) =
           </nav>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* User Account / Login Button */}
+            {isAuthenticated && user ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 transition shadow-sm"
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                    isAdmin ? "bg-purple-600" : "bg-pink-500"
+                  }`}>
+                    {isAdmin ? "👑" : user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="text-left hidden sm:block max-w-[100px] truncate">
+                    <span className="block truncate font-bold text-gray-800">{user.name}</span>
+                    <span className={`text-[10px] block leading-tight ${isAdmin ? "text-purple-600 font-semibold" : "text-gray-400"}`}>
+                      {isAdmin ? "Administrator" : "Customer"}
+                    </span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-xs font-bold text-gray-900 truncate">{user.name}</p>
+                      <p className="text-[11px] text-gray-500 truncate">{user.email}</p>
+                    </div>
+
+                    {!isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          onOpenOrders();
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-pink-50 hover:text-pink-600 flex items-center gap-2 transition"
+                      >
+                        <PackageCheck className="w-4 h-4 text-pink-500" />
+                        <span>Riwayat Pesanan Saya</span>
+                      </button>
+                    )}
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          setIsAdminOpen(true);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs text-purple-700 hover:bg-purple-50 flex items-center gap-2 transition font-medium"
+                      >
+                        <LayoutDashboard className="w-4 h-4 text-purple-600" />
+                        <span>Buka Panel Admin</span>
+                      </button>
+                    )}
+
+                    <div className="border-t border-gray-100 my-1" />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition"
+                    >
+                      <LogOut className="w-4 h-4 text-red-500" />
+                      <span>Keluar (Logout)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={openLogin}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
+              >
+                <UserIcon className="w-3.5 h-3.5" />
+                <span>Masuk / Akun</span>
+              </button>
+            )}
+
             {/* Admin Toggle Button */}
             <button
-              onClick={() => setIsAdminOpen(!isAdminOpen)}
+              onClick={() => {
+                if (!isAdmin) {
+                  openLogin();
+                } else {
+                  setIsAdminOpen(!isAdminOpen);
+                }
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                 isAdminOpen
                   ? "bg-slate-900 text-white border-slate-900 shadow-sm"
                   : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
               }`}
-              title="Akses Panel Pengelola Toko"
+              title={isAdmin ? "Akses Panel Pengelola Toko" : "Login sebagai Admin untuk membuka panel"}
             >
               <LayoutDashboard className="w-4 h-4" />
-              <span>{isAdminOpen ? "Tutup Admin" : "Panel Admin"}</span>
+              <span className="hidden sm:inline">{isAdminOpen ? "Tutup Admin" : "Panel Admin"}</span>
+              {!isAdmin && <span className="text-[10px] text-amber-600 font-bold">🔒</span>}
             </button>
 
             {/* Cart Button */}

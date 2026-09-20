@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   CreditCard,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 import { Order } from "../types";
 
 interface CheckoutModalProps {
@@ -23,10 +24,19 @@ interface CheckoutModalProps {
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onOrderSuccess }) => {
   const { items, subtotal, discountAmount, appliedPromo, clearCart } = useCart();
+  const { user, authFetch } = useAuth();
 
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerName, setCustomerName] = useState(user?.name || "");
+  const [customerPhone, setCustomerPhone] = useState(user?.phone || "");
+  const [customerEmail, setCustomerEmail] = useState(user?.email || "");
+
+  useEffect(() => {
+    if (user) {
+      if (!customerName) setCustomerName(user.name);
+      if (!customerEmail) setCustomerEmail(user.email);
+      if (!customerPhone && user.phone) setCustomerPhone(user.phone);
+    }
+  }, [user]);
   const [deliveryMethod, setDeliveryMethod] = useState<"instant_courier" | "sameday" | "pickup">("instant_courier");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -69,10 +79,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/orders/checkout", {
+      const res = await authFetch("/api/orders/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          customerId: user?.id,
           customerName,
           customerPhone,
           customerEmail,

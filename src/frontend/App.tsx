@@ -17,7 +17,10 @@ import { CartDrawer } from "./components/CartDrawer";
 import { CheckoutModal } from "./components/CheckoutModal";
 import { OrderSuccessModal } from "./components/OrderSuccessModal";
 import { AdminPanel } from "./components/AdminPanel";
+import { AuthModal } from "./components/AuthModal";
+import { CustomerOrdersModal } from "./components/CustomerOrdersModal";
 import { CartProvider } from "./context/CartContext";
+import { AuthProvider } from "./context/AuthContext";
 import { Category, Product, Promotion, Order } from "./types";
 
 export function DessertBoxApp() {
@@ -29,6 +32,7 @@ export function DessertBoxApp() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,7 +71,11 @@ export function DessertBoxApp() {
   return (
     <div className="min-h-screen flex flex-col selection:bg-amber-100 selection:text-amber-900">
       {/* Navbar */}
-      <Navbar isAdminOpen={isAdminOpen} setIsAdminOpen={setIsAdminOpen} />
+      <Navbar
+        isAdminOpen={isAdminOpen}
+        setIsAdminOpen={setIsAdminOpen}
+        onOpenOrders={() => setIsOrdersOpen(true)}
+      />
 
       <main className="flex-1">
         {/* Admin Management Dashboard (Toggled) */}
@@ -377,14 +385,23 @@ export function DessertBoxApp() {
         order={successOrder}
         onClose={() => setSuccessOrder(null)}
       />
+
+      <CustomerOrdersModal
+        isOpen={isOrdersOpen}
+        onClose={() => setIsOrdersOpen(false)}
+      />
+
+      <AuthModal />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <CartProvider>
-      <DessertBoxApp />
-    </CartProvider>
+    <AuthProvider>
+      <CartProvider>
+        <DessertBoxApp />
+      </CartProvider>
+    </AuthProvider>
   );
 }

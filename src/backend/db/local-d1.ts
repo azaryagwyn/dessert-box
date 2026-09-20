@@ -1,28 +1,20 @@
-let DatabaseSyncClass: any = null;
-try {
-  // @ts-ignore
-  const { createRequire } = await import("node:module");
-  // @ts-ignore
-  const require = createRequire(import.meta.url);
-  DatabaseSyncClass = require("node:sqlite")?.DatabaseSync;
-} catch {
-  DatabaseSyncClass = null;
-}
+import { DatabaseSync } from "node:sqlite";
 
 export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Database {
-  if (!DatabaseSyncClass) {
-    return {
-      prepare() { return { bind() { return this; }, all: async () => ({ results: [] }), run: async () => ({}), get: async () => null, first: async () => null, raw: async () => [] }; },
-      batch: async () => [],
-      exec: async () => ({ count: 0, duration: 0 }),
-      dump() { throw new Error("Not implemented"); }
-    } as unknown as D1Database;
-  }
-
-  const sqlite = new DatabaseSyncClass(dbPath);
+  const sqlite = new DatabaseSync(dbPath);
 
   // Buat tabel jika belum ada
   sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      phone TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'customer',
+      created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -74,6 +66,7 @@ export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Databas
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       order_number TEXT NOT NULL UNIQUE,
+      customer_id TEXT,
       customer_name TEXT NOT NULL,
       customer_phone TEXT NOT NULL,
       customer_email TEXT NOT NULL,
@@ -105,6 +98,20 @@ export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Databas
       subtotal INTEGER NOT NULL
     );
   `);
+
+  try {
+    sqlite.exec("ALTER TABLE orders ADD COLUMN customer_id TEXT;");
+  } catch (_) {
+    // Ignore if column already exists
+  }
+
+  // Cek apakah data awal user sudah ada
+  try {
+    const userCount = sqlite.prepare("SELECT count(*) as count FROM users").get() as any;
+    if (!userCount || userCount.count === 0) {
+      seedUsers(sqlite);
+    }
+  } catch (_) {}
 
   // Cek apakah data awal sudah ada
   const catCount = sqlite.prepare("SELECT count(*) as count FROM categories").get() as any;
@@ -168,7 +175,34 @@ export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Databas
   } as unknown as D1Database;
 }
 
-function seedDatabase(sqlite: any) {
+function seedUsers(sqlite: DatabaseSync) {
+  const insertUser = sqlite.prepare(`
+    INSERT OR IGNORE INTO users (id, name, email, phone, password_hash, role, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  insertUser.run(
+    "usr_admin_1",
+    "Admin SweetLayers",
+    "admin@sweetlayers.com",
+    "081234567890",
+    "02f34e4e6b5351afc6ab1163a31aca891937556501c12323ff77d72dbe537543", // AdminSweetLayers2026!
+    "admin",
+    1726500000000
+  );
+
+  insertUser.run(
+    "usr_cust_1",
+    "Jessica Angeline",
+    "customer@sweetlayers.com",
+    "081234567891",
+    "630f9b10c486621cbf4a30d39cfa86379fbb87f7cc78547ed2884ae435a6a023", // Customer123!
+    "customer",
+    1726500000000
+  );
+}
+
+function seedDatabase(sqlite: DatabaseSync) {
   const now = Date.now();
 
   // Kategori

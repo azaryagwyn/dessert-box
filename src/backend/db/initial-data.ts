@@ -1,3 +1,24 @@
+export const DEFAULT_USERS = [
+  {
+    id: "usr_admin_1",
+    name: "Admin SweetLayers",
+    email: "admin@sweetlayers.com",
+    phone: "081234567890",
+    passwordHash: "02f34e4e6b5351afc6ab1163a31aca891937556501c12323ff77d72dbe537543", // AdminSweetLayers2026!
+    role: "admin",
+    createdAt: 1726500000000,
+  },
+  {
+    id: "usr_cust_1",
+    name: "Jessica Angeline",
+    email: "customer@sweetlayers.com",
+    phone: "081234567891",
+    passwordHash: "630f9b10c486621cbf4a30d39cfa86379fbb87f7cc78547ed2884ae435a6a023", // Customer123!
+    role: "customer",
+    createdAt: 1726500000000,
+  },
+];
+
 export const DEFAULT_CATEGORIES = [
   { id: "cat_all", name: "Semua Menu", slug: "all", icon: "🍰" },
   { id: "cat_choco", name: "Choco Lovers", slug: "choco-lovers", icon: "🍫" },
