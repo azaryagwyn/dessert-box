@@ -354,7 +354,18 @@ app.get("/api/products", async (c) => {
       const varsFromDb = await db.select().from(schema.productVariants).all();
 
       if (prodsFromDb && prodsFromDb.length > 0) {
-        productList = prodsFromDb;
+        productList = prodsFromDb.map((p) => {
+          const defaultMatch = DEFAULT_PRODUCTS.find((dp) => dp.id === p.id);
+          if (
+            defaultMatch &&
+            p.imageUrl &&
+            p.imageUrl.includes("images.unsplash.com") &&
+            !defaultMatch.imageUrl.includes("images.unsplash.com")
+          ) {
+            return { ...p, imageUrl: defaultMatch.imageUrl };
+          }
+          return p;
+        });
       }
       if (varsFromDb && varsFromDb.length > 0) {
         allVariants = varsFromDb;
@@ -409,7 +420,18 @@ app.get("/api/products/:slug", async (c) => {
         .from(schema.products)
         .where(eq(schema.products.slug, slug))
         .get();
-      if (pDb) product = pDb;
+      if (pDb) {
+        product = pDb;
+        const defaultMatch = DEFAULT_PRODUCTS.find((dp) => dp.id === pDb.id);
+        if (
+          defaultMatch &&
+          product.imageUrl &&
+          product.imageUrl.includes("images.unsplash.com") &&
+          !defaultMatch.imageUrl.includes("images.unsplash.com")
+        ) {
+          product.imageUrl = defaultMatch.imageUrl;
+        }
+      }
       const varsFromDb = await db.select().from(schema.productVariants).all();
       if (varsFromDb && varsFromDb.length > 0) allVariants = varsFromDb;
     } catch (e) {
