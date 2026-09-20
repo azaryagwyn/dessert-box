@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { DEFAULT_PRODUCTS, DEFAULT_CATEGORIES, DEFAULT_VARIANTS, DEFAULT_PROMOTIONS, DEFAULT_USERS } from "./initial-data";
 
 export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Database {
   const sqlite = new DatabaseSync(dbPath);
@@ -117,6 +118,13 @@ export function createLocalD1(dbPath: string = "./data/local.sqlite"): D1Databas
   const catCount = sqlite.prepare("SELECT count(*) as count FROM categories").get() as any;
   if (!catCount || catCount.count === 0) {
     seedDatabase(sqlite);
+  } else {
+    // Sinkronisasi foto produk baru jika masih menggunakan link dummy unsplash
+    try {
+      for (const p of DEFAULT_PRODUCTS) {
+        sqlite.prepare("UPDATE products SET image_url = ? WHERE id = ? AND image_url LIKE '%unsplash%'").run(p.imageUrl, p.id);
+      }
+    } catch (_) {}
   }
 
   function createPreparedStatement(query: string, boundParams: any[] = []) {

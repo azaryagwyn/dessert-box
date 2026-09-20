@@ -362,6 +362,12 @@ app.get("/api/products", async (c) => {
             p.imageUrl.includes("images.unsplash.com") &&
             !defaultMatch.imageUrl.includes("images.unsplash.com")
           ) {
+            // Persist the update to Cloudflare D1 database directly
+            db.update(schema.products)
+              .set({ imageUrl: defaultMatch.imageUrl })
+              .where(eq(schema.products.id, p.id))
+              .execute()
+              .catch(() => {});
             return { ...p, imageUrl: defaultMatch.imageUrl };
           }
           return p;
