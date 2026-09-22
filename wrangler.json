@@ -7,5 +7,12 @@
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dessert-box-db",
+      "database_id": "dessert-box-db"
+    }
+  ]
 }

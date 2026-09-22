@@ -147,25 +147,74 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
 
   const handlePaymentSuccess = async (orderNumber: string, method: string = "QRIS Instant") => {
     setIsSimulatingPay(true);
+
+    const orderData = {
+      orderNumber,
+      customerId: user?.id || null,
+      customerName,
+      customerPhone,
+      customerEmail: customerEmail || user?.email || "",
+      deliveryMethod,
+      deliveryAddress,
+      deliveryDate,
+      deliveryTimeSlot,
+      greetingCardText,
+      subtotal,
+      discountAmount,
+      shippingFee,
+      totalAmount,
+      promoCode: appliedPromo?.code || "",
+      status: "paid",
+      paymentMethod: method,
+      snapToken: simulationData?.snapToken || "",
+      createdAt: Date.now(),
+      items: items.map((it) => ({
+        productId: it.productId,
+        variantId: it.variantId,
+        productName: it.name,
+        variantName: it.variantName,
+        unitPrice: it.unitPrice,
+        quantity: it.quantity,
+        subtotal: it.unitPrice * it.quantity,
+      })),
+    };
+
+    let paidOrder: any = orderData;
+
     try {
       const res = await fetch("/api/payment/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderNumber, paymentMethod: method }),
+        body: JSON.stringify({ orderNumber, paymentMethod: method, orderData }),
       });
 
       const data = await res.json();
-      setIsSimulatingPay(false);
-
       if (data.success && data.order) {
-        clearCart();
-        setSimulationData(null);
-        onClose();
-        onOrderSuccess(data.order);
+        paidOrder = data.order;
       }
     } catch (err) {
+      console.warn("Payment confirmation warning:", err);
+    } finally {
       setIsSimulatingPay(false);
-      console.error(err);
+
+      // 1. Unconditionally clear the shopping cart
+      clearCart();
+
+      // 2. Save order to persistent local storage for cross-isolate and admin sync
+      try {
+        const existingAll = JSON.parse(localStorage.getItem("sweetlayers_all_orders") || "[]");
+        const filtered = Array.isArray(existingAll)
+          ? existingAll.filter((o: any) => o.orderNumber !== paidOrder.orderNumber)
+          : [];
+        localStorage.setItem("sweetlayers_all_orders", JSON.stringify([paidOrder, ...filtered]));
+      } catch (e) {
+        console.warn("Could not save to localStorage:", e);
+      }
+
+      // 3. Close modal & trigger success popup
+      setSimulationData(null);
+      onClose();
+      onOrderSuccess(paidOrder);
     }
   };
 

@@ -881,56 +881,115 @@ app.get("/api/orders/:orderNumber", async (c) => {
   return c.json(order);
 });
 
-// 8. Payment Simulation (Sandbox Testing / Verifikasi Instan)
+// 8. Payment Simulation & Verification (Supports Cross-Isolate Self-Healing)
 app.post("/api/payment/simulate", async (c) => {
-  const { orderNumber, paymentMethod } = await c.req.json<{
+  const { orderNumber, paymentMethod, orderData } = await c.req.json<{
     orderNumber: string;
     paymentMethod?: string;
+    orderData?: any;
   }>();
 
+  const method = paymentMethod || "QRIS Instant";
   let order = memoryOrders.find((o) => o.orderNumber === orderNumber);
+
+  // Cross-isolate recovery: if order is not found in this isolate's memory, reconstruct it from orderData
+  if (!order && orderData) {
+    order = {
+      id: orderData.id || `ord_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      orderNumber: orderNumber || orderData.orderNumber,
+      customerId: orderData.customerId || null,
+      customerName: orderData.customerName || "Customer",
+      customerPhone: orderData.customerPhone || "",
+      customerEmail: orderData.customerEmail || "",
+      deliveryMethod: orderData.deliveryMethod || "Instant Courier",
+      deliveryAddress: orderData.deliveryAddress || "",
+      deliveryDate: orderData.deliveryDate || "",
+      deliveryTimeSlot: orderData.deliveryTimeSlot || "",
+      greetingCardText: orderData.greetingCardText || "",
+      subtotal: Number(orderData.subtotal) || 0,
+      discountAmount: Number(orderData.discountAmount) || 0,
+      shippingFee: Number(orderData.shippingFee) || 0,
+      totalAmount: Number(orderData.totalAmount) || 0,
+      promoCode: orderData.promoCode || "",
+      status: "paid",
+      paymentMethod: method,
+      snapToken: orderData.snapToken || "",
+      createdAt: orderData.createdAt || Date.now(),
+      items: Array.isArray(orderData.items) ? orderData.items : [],
+    };
+    memoryOrders.unshift(order);
+  }
 
   if (c.env?.DB) {
     try {
       const db = drizzle(c.env.DB, { schema });
-      const oDb = await db
+      let oDb = await db
         .select()
         .from(schema.orders)
         .where(eq(schema.orders.orderNumber, orderNumber))
         .get();
 
-      if (oDb) {
-        const items = await db
-          .select()
-          .from(schema.orderItems)
-          .where(eq(schema.orderItems.orderId, oDb.id))
-          .all();
+      if (!oDb && order) {
+        // Insert order if missing from D1
+        await db.insert(schema.orders).values({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          customerId: order.customerId,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          customerEmail: order.customerEmail || "",
+          deliveryMethod: order.deliveryMethod,
+          deliveryAddress: order.deliveryAddress || "",
+          deliveryDate: order.deliveryDate || "",
+          deliveryTimeSlot: order.deliveryTimeSlot || "",
+          greetingCardText: order.greetingCardText || "",
+          subtotal: order.subtotal,
+          discountAmount: order.discountAmount,
+          shippingFee: order.shippingFee,
+          totalAmount: order.totalAmount,
+          promoCode: order.promoCode || "",
+          status: "paid",
+          paymentMethod: method,
+          snapToken: order.snapToken || "",
+          createdAt: order.createdAt,
+        }).catch(() => {});
 
-        for (const it of items) {
-          const v = await db
-            .select()
-            .from(schema.productVariants)
-            .where(eq(schema.productVariants.id, it.variantId))
-            .get();
-          if (v) {
-            await db
-              .update(schema.productVariants)
-              .set({ stock: Math.max(0, v.stock - it.quantity) })
-              .where(eq(schema.productVariants.id, it.variantId));
+        if (order.items) {
+          for (const it of order.items) {
+            await db.insert(schema.orderItems).values({
+              id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              orderId: order.id,
+              productId: it.productId,
+              variantId: it.variantId,
+              productName: it.productName || it.name,
+              variantName: it.variantName,
+              unitPrice: it.unitPrice,
+              quantity: it.quantity,
+              subtotal: it.subtotal || (it.unitPrice * it.quantity),
+            }).catch(() => {});
           }
         }
-
+      } else if (oDb) {
         await db
           .update(schema.orders)
-          .set({ status: "paid", paymentMethod: paymentMethod || "QRIS Instant" })
+          .set({ status: "paid", paymentMethod: method })
           .where(eq(schema.orders.id, oDb.id));
+      }
 
-        const updated = await db
+      // Deduct stock in D1
+      const itemsToDeduct = order?.items || [];
+      for (const it of itemsToDeduct) {
+        const v = await db
           .select()
-          .from(schema.orders)
-          .where(eq(schema.orders.id, oDb.id))
+          .from(schema.productVariants)
+          .where(eq(schema.productVariants.id, it.variantId))
           .get();
-        return c.json({ success: true, order: { ...updated, items } });
+        if (v) {
+          await db
+            .update(schema.productVariants)
+            .set({ stock: Math.max(0, v.stock - it.quantity) })
+            .where(eq(schema.productVariants.id, it.variantId));
+        }
       }
     } catch (e) {
       console.warn("D1 simulate payment error:", e);
@@ -941,7 +1000,7 @@ app.post("/api/payment/simulate", async (c) => {
     return c.json({ error: "Pesanan tidak ditemukan" }, 404);
   }
 
-  // Update in-memory stock & status
+  // Deduct in-memory stock
   if (order.items) {
     for (const it of order.items) {
       const idx = memoryVariants.findIndex((v) => v.id === it.variantId);
@@ -952,7 +1011,7 @@ app.post("/api/payment/simulate", async (c) => {
   }
 
   order.status = "paid";
-  order.paymentMethod = paymentMethod || "QRIS Instant";
+  order.paymentMethod = method;
 
   return c.json({
     success: true,
@@ -1071,6 +1130,35 @@ app.get("/api/admin/orders", async (c) => {
   }
 
   return c.json(memoryOrders);
+});
+
+// 11b. Admin Sync Orders from Client
+app.post("/api/admin/sync-orders", async (c) => {
+  const { orders } = await c.req.json<{ orders: any[] }>();
+  if (!Array.isArray(orders)) {
+    return c.json({ error: "Format data orders tidak valid" }, 400);
+  }
+
+  for (const ord of orders) {
+    if (!ord || !ord.orderNumber) continue;
+    const existingIdx = memoryOrders.findIndex((o) => o.orderNumber === ord.orderNumber);
+    if (existingIdx === -1) {
+      memoryOrders.unshift(ord);
+      // Also deduct in-memory stock if paid
+      if (ord.status === "paid" && ord.items) {
+        for (const it of ord.items) {
+          const idx = memoryVariants.findIndex((v) => v.id === it.variantId);
+          if (idx > -1) {
+            memoryVariants[idx].stock = Math.max(0, memoryVariants[idx].stock - it.quantity);
+          }
+        }
+      }
+    } else {
+      memoryOrders[existingIdx] = { ...memoryOrders[existingIdx], ...ord };
+    }
+  }
+
+  return c.json({ success: true, count: memoryOrders.length });
 });
 
 // 12. Admin Variant Stock

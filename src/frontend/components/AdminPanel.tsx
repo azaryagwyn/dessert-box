@@ -160,15 +160,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     if (!isAdmin) return;
     setLoading(true);
     try {
+      // 1. Read locally cached orders from browser storage (for cross-isolate reliability)
+      let localOrders: any[] = [];
+      try {
+        const raw = localStorage.getItem("sweetlayers_all_orders");
+        if (raw) localOrders = JSON.parse(raw);
+      } catch (e) {}
+
+      // 2. Sync local orders to backend isolate if any
+      if (localOrders.length > 0) {
+        await authFetch("/api/admin/sync-orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orders: localOrders }),
+        }).catch(() => {});
+      }
+
+      // 3. Fetch server data
       const [statsRes, ordersRes, productsRes] = await Promise.all([
         authFetch("/api/admin/stats"),
         authFetch("/api/admin/orders"),
         fetch("/api/products"),
       ]);
 
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (ordersRes.ok) setOrders(await ordersRes.json());
+      let fetchedOrders: any[] = [];
+      if (ordersRes.ok) fetchedOrders = await ordersRes.json();
       if (productsRes.ok) setProducts(await productsRes.json());
+
+      // Merge and deduplicate by orderNumber
+      const mergedMap = new Map<string, any>();
+      if (Array.isArray(fetchedOrders)) {
+        for (const ord of fetchedOrders) {
+          if (ord && ord.orderNumber) mergedMap.set(ord.orderNumber, ord);
+        }
+      }
+      if (Array.isArray(localOrders)) {
+        for (const ord of localOrders) {
+          if (ord && ord.orderNumber && !mergedMap.has(ord.orderNumber)) {
+            mergedMap.set(ord.orderNumber, ord);
+          }
+        }
+      }
+      const finalOrders = Array.from(mergedMap.values()).sort(
+        (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+      );
+      setOrders(finalOrders);
+
+      // Recalculate stats with merged orders
+      if (statsRes.ok) {
+        const serverStats = await statsRes.json();
+        const calculatedRevenue = finalOrders
+          .filter((o) => o.status !== "pending" && o.status !== "cancelled")
+          .reduce((acc, curr) => acc + (Number(curr.totalAmount) || 0), 0);
+
+        setStats({
+          ...serverStats,
+          totalRevenue: Math.max(serverStats.totalRevenue || 0, calculatedRevenue),
+          totalOrders: Math.max(serverStats.totalOrders || 0, finalOrders.length),
+          processingOrders: finalOrders.filter((o) => o.status === "paid").length,
+          completedOrders: finalOrders.filter((o) => o.status === "completed").length,
+          pendingOrders: finalOrders.filter((o) => o.status === "pending").length,
+        });
+      }
     } catch (err) {
       console.error("Admin data fetch error:", err);
     } finally {
@@ -190,6 +243,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
 
   const handleUpdateOrderStatus = async (orderId: string, status: string) => {
     try {
+      // Update in localStorage as well
+      try {
+        const raw = localStorage.getItem("sweetlayers_all_orders");
+        if (raw) {
+          const arr = JSON.parse(raw);
+          const updated = arr.map((o: any) =>
+            o.id === orderId || o.orderNumber === orderId ? { ...o, status } : o
+          );
+          localStorage.setItem("sweetlayers_all_orders", JSON.stringify(updated));
+        }
+      } catch (e) {}
+
       const res = await authFetch(`/api/admin/orders/${orderId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

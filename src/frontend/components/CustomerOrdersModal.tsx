@@ -56,11 +56,45 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
       setIsLoading(true);
       try {
         const res = await authFetch("/api/customer/orders");
+        let serverOrders: any[] = [];
         if (res.ok) {
           const data = await res.json();
-          if (isMounted) {
-            setOrders(Array.isArray(data) ? data : []);
+          if (Array.isArray(data)) serverOrders = data;
+        }
+
+        // Also read from local cache
+        let localOrders: any[] = [];
+        try {
+          const raw = localStorage.getItem("sweetlayers_all_orders");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              localOrders = parsed.filter(
+                (o) =>
+                  (o.customerId && o.customerId === user.id) ||
+                  (o.customerEmail &&
+                    user.email &&
+                    o.customerEmail.toLowerCase() === user.email.toLowerCase())
+              );
+            }
           }
+        } catch (e) {}
+
+        const mergedMap = new Map<string, any>();
+        for (const o of serverOrders) {
+          if (o && o.orderNumber) mergedMap.set(o.orderNumber, o);
+        }
+        for (const o of localOrders) {
+          if (o && o.orderNumber && !mergedMap.has(o.orderNumber)) {
+            mergedMap.set(o.orderNumber, o);
+          }
+        }
+        const finalOrders = Array.from(mergedMap.values()).sort(
+          (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+        );
+
+        if (isMounted) {
+          setOrders(finalOrders);
         }
       } catch (err) {
         console.error("Gagal memuat riwayat pesanan:", err);
