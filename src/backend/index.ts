@@ -59,6 +59,7 @@ app.onError((err, c) => {
 app.get("/api/health", (c) =>
   c.json({
     status: "ok",
+    version: "2.2-resilient",
     timestamp: Date.now(),
     d1_connected: Boolean(c.env?.DB),
   })
