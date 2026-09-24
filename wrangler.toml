@@ -1,9 +1,17 @@
 name = "dessert-box"
 compatibility_date = "2024-04-01"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "dist"
+main = "src/backend/index.ts"
+
+[[routes]]
+pattern = "ecommerce.sweetlayers.my.id"
+custom_domain = true
 
 [[d1_databases]]
 binding = "DB"
 database_name = "dessert-box-db"
-database_id = "dessert-box-db"
+database_id = "e0cea204-e02a-4e42-b958-c002c37483bc"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
