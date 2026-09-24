@@ -1021,45 +1021,167 @@ app.post("/api/payment/simulate", async (c) => {
   });
 });
 
-// 9. Webhook Midtrans
-app.post("/api/payment/webhook", async (c) => {
-  const notification = await c.req.json<{
-    order_id: string;
-    transaction_status: string;
-    payment_type?: string;
-  }>();
+// Helper: Mark order as paid and deduct product variant stocks
+async function markOrderPaidAndDeductStock(
+  c: any,
+  orderNumber: string,
+  paymentMethod: string = "midtrans"
+) {
+  let order = memoryOrders.find((o) => o.orderNumber === orderNumber);
 
-  const orderNumber = notification.order_id;
-  const status = notification.transaction_status;
+  if (order && order.status !== "paid") {
+    order.status = "paid";
+    order.paymentMethod = paymentMethod;
 
-  if (status === "capture" || status === "settlement") {
-    // tandai paid
-    const ord = memoryOrders.find((o) => o.orderNumber === orderNumber);
-    if (ord) {
-      ord.status = "paid";
-      ord.paymentMethod = notification.payment_type || "midtrans";
-    }
-
-    if (c.env?.DB) {
-      try {
-        const db = drizzle(c.env.DB, { schema });
-        const oDb = await db
-          .select()
-          .from(schema.orders)
-          .where(eq(schema.orders.orderNumber, orderNumber))
-          .get();
-        if (oDb) {
-          await db
-            .update(schema.orders)
-            .set({ status: "paid", paymentMethod: notification.payment_type || "midtrans" })
-            .where(eq(schema.orders.id, oDb.id));
+    if (order.items) {
+      for (const it of order.items) {
+        const idx = memoryVariants.findIndex((v) => v.id === it.variantId);
+        if (idx > -1) {
+          memoryVariants[idx].stock = Math.max(0, memoryVariants[idx].stock - it.quantity);
         }
-      } catch (e) {}
+      }
     }
   }
 
-  return c.json({ status: "ok" });
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const oDb = await db
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.orderNumber, orderNumber))
+        .get();
+
+      if (oDb && oDb.status !== "paid") {
+        await db
+          .update(schema.orders)
+          .set({ status: "paid", paymentMethod })
+          .where(eq(schema.orders.id, oDb.id));
+
+        const orderItems = await db
+          .select()
+          .from(schema.orderItems)
+          .where(eq(schema.orderItems.orderId, oDb.id))
+          .all();
+
+        for (const it of orderItems) {
+          const v = await db
+            .select()
+            .from(schema.productVariants)
+            .where(eq(schema.productVariants.id, it.variantId))
+            .get();
+          if (v) {
+            await db
+              .update(schema.productVariants)
+              .set({ stock: Math.max(0, v.stock - it.quantity) })
+              .where(eq(schema.productVariants.id, it.variantId));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("DB markOrderPaid error:", e);
+    }
+  }
+
+  return order;
+}
+
+// 9. Real-time Midtrans Status Check
+app.get("/api/payment/status/:orderNumber", async (c) => {
+  const orderNumber = c.req.param("orderNumber");
+  let order = memoryOrders.find((o) => o.orderNumber === orderNumber);
+
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const oDb = await db
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.orderNumber, orderNumber))
+        .get();
+      if (oDb) order = oDb as any;
+    } catch (e) {}
+  }
+
+  if (order && order.status === "paid") {
+    return c.json({ success: true, status: "paid", order });
+  }
+
+  // Check directly with Midtrans API
+  const serverKey =
+    c.env?.MIDTRANS_SERVER_KEY || atob("TWlkLXNlcnZlci1lSl9WNEMxZE5JeHhyMkhQNmZ0cmgyV3Q=");
+  const isProduction = c.env?.MIDTRANS_IS_PRODUCTION === "true";
+  const midtransEndpoint = isProduction
+    ? `https://api.midtrans.com/v2/${orderNumber}/status`
+    : `https://api.sandbox.midtrans.com/v2/${orderNumber}/status`;
+
+  try {
+    const midtransRes = await fetch(midtransEndpoint, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Basic ${btoa(serverKey + ":")}`,
+      },
+    });
+
+    if (midtransRes.ok) {
+      const midData = (await midtransRes.json()) as any;
+      const tStatus = midData.transaction_status;
+      const fStatus = midData.fraud_status;
+
+      if (tStatus === "settlement" || (tStatus === "capture" && (fStatus === "accept" || !fStatus))) {
+        const updated = await markOrderPaidAndDeductStock(
+          c,
+          orderNumber,
+          midData.payment_type || "midtrans"
+        );
+        return c.json({
+          success: true,
+          status: "paid",
+          transaction_status: tStatus,
+          payment_type: midData.payment_type,
+          order: updated || order,
+        });
+      } else {
+        return c.json({
+          success: true,
+          status: tStatus || "pending",
+          transaction_status: tStatus,
+        });
+      }
+    }
+  } catch (err: any) {
+    console.warn("Midtrans status check error:", err);
+  }
+
+  return c.json({ success: true, status: order?.status || "pending" });
 });
+
+// 10. Webhook / Notification Midtrans
+const handleMidtransWebhook = async (c: any) => {
+  try {
+    const notification = await c.req.json<{
+      order_id: string;
+      transaction_status: string;
+      payment_type?: string;
+      fraud_status?: string;
+    }>();
+
+    const orderNumber = notification.order_id;
+    const status = notification.transaction_status;
+    const fraud = notification.fraud_status;
+
+    if (status === "settlement" || (status === "capture" && (fraud === "accept" || !fraud))) {
+      await markOrderPaidAndDeductStock(c, orderNumber, notification.payment_type || "midtrans");
+    }
+
+    return c.json({ status: "ok" });
+  } catch (err: any) {
+    return c.json({ status: "error", message: err.message }, 400);
+  }
+};
+
+app.post("/api/payment/webhook", handleMidtransWebhook);
+app.post("/api/payment/notification", handleMidtransWebhook);
 
 // ==========================================
 // ADMIN MIDDLEWARE & MANAGEMENT

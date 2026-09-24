@@ -153,9 +153,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     }
   };
 
-  // Quick admin login state
-  const [adminLoggingIn, setAdminLoggingIn] = useState(false);
-
   const fetchAdminData = async () => {
     if (!isAdmin) return;
     setLoading(true);
@@ -234,12 +231,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
       fetchAdminData();
     }
   }, [isAdmin]);
-
-  const handleQuickAdminLogin = async () => {
-    setAdminLoggingIn(true);
-    await login("admin@sweetlayers.com", "AdminSweetLayers2026!");
-    setAdminLoggingIn(false);
-  };
 
   const handleUpdateOrderStatus = async (orderId: string, status: string) => {
     try {
@@ -367,31 +358,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
-            onClick={handleQuickAdminLogin}
-            disabled={adminLoggingIn}
-            className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-slate-950 font-bold rounded-xl text-xs shadow-lg transition flex items-center justify-center gap-2"
-          >
-            {adminLoggingIn ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
-                <span>Masuk Akun Admin...</span>
-              </>
-            ) : (
-              <>
-                <span>👑</span>
-                <span>Masuk Sebagai Admin (1-Klik)</span>
-              </>
-            )}
-          </button>
-          <button
             onClick={openLogin}
-            className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition"
+            className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-semibold rounded-xl text-xs transition shadow-md"
           >
-            Buka Form Login
+            Masuk dengan Akun Admin
           </button>
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2.5 text-slate-500 hover:text-slate-400 text-xs transition"
+            className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition"
           >
             Tutup
           </button>

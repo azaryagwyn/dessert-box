@@ -74,13 +74,6 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  const fillAdminAccount = () => {
-    setAuthModalMode("login");
-    setErrorMessage("");
-    setLoginEmail("admin@sweetlayers.com");
-    setLoginPassword("AdminSweetLayers2026!");
-  };
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -145,20 +138,6 @@ export const AuthModal: React.FC = () => {
               <span>{errorMessage}</span>
             </div>
           )}
-
-          {/* Quick Admin Demo Fill */}
-          <div className="mb-4 bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
-            <span className="text-[11px] text-slate-600 flex items-center gap-1">
-              <span>👑</span> Akun Khusus Pengelola / Admin:
-            </span>
-            <button
-              type="button"
-              onClick={fillAdminAccount}
-              className="px-2.5 py-1 bg-white border border-slate-300 hover:border-purple-400 hover:bg-purple-50 text-purple-700 rounded-lg font-medium transition text-[11px]"
-            >
-              Isi Akun Admin (1-Klik)
-            </button>
-          </div>
 
           {/* LOGIN FORM */}
           {authModalMode === "login" && (

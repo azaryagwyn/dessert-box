@@ -170,26 +170,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Admin Toggle Button */}
-            <button
-              onClick={() => {
-                if (!isAdmin) {
-                  openLogin();
-                } else {
-                  setIsAdminOpen(!isAdminOpen);
-                }
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                isAdminOpen
-                  ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-                  : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-              }`}
-              title={isAdmin ? "Akses Panel Pengelola Toko" : "Login sebagai Admin untuk membuka panel"}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="hidden sm:inline">{isAdminOpen ? "Tutup Admin" : "Panel Admin"}</span>
-              {!isAdmin && <span className="text-[10px] text-amber-600 font-bold">🔒</span>}
-            </button>
+            {/* Admin Toggle Button - Only visible for authenticated admin */}
+            {isAdmin && (
+              <button
+                onClick={() => setIsAdminOpen(!isAdminOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                  isAdminOpen
+                    ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                    : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                }`}
+                title="Akses Panel Pengelola Toko"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span className="hidden sm:inline">{isAdminOpen ? "Tutup Admin" : "Panel Admin"}</span>
+              </button>
+            )}
 
             {/* Cart Button */}
             <button

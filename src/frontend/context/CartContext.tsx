@@ -127,6 +127,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearCart = () => {
     setItems([]);
     setAppliedPromo(null);
+    try {
+      localStorage.removeItem("sweetlayers_cart");
+      localStorage.removeItem("sweetlayers_promo");
+    } catch (_) {}
   };
 
   const applyPromo = async (code: string): Promise<{ success: boolean; message: string }> => {
