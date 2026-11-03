@@ -1,0 +1,38 @@
+# SweetLayers Dessert Box Robots.txt
+# Optimized for Google, Bing, and AI Search Crawlers (GEO)
+User-agent: *
+Allow: /
+Disallow: /api/admin/
+Disallow: /api/auth/
+Disallow: /admin
+
+# Allow Major AI & Search Engine Crawlers for GEO (Generative Engine Optimization)
+User-agent: Googlebot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+# Sitemap Location
+Sitemap: https://ecommerce.sweetlayers.my.id/sitemap.xml

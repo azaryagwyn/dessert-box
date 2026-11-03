@@ -92,6 +92,42 @@ CREATE TABLE IF NOT EXISTS order_items (
   subtotal INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS stock_logs (
+  id TEXT PRIMARY KEY,
+  variant_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  variant_name TEXT NOT NULL,
+  change_type TEXT NOT NULL,
+  quantity_delta INTEGER NOT NULL,
+  previous_stock INTEGER NOT NULL,
+  new_stock INTEGER NOT NULL,
+  reference_id TEXT,
+  notes TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS promotion_usages (
+  id TEXT PRIMARY KEY,
+  promotion_id TEXT NOT NULL REFERENCES promotions(id),
+  order_id TEXT NOT NULL,
+  order_number TEXT NOT NULL,
+  customer_email TEXT NOT NULL,
+  discount_amount INTEGER NOT NULL,
+  used_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS customer_retention_actions (
+  id TEXT PRIMARY KEY,
+  customer_email TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  promo_code TEXT NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'sent',
+  created_at INTEGER NOT NULL
+);
+
 -- Seed Categories
 INSERT OR IGNORE INTO categories (id, name, slug, icon) VALUES
 ('cat_all', 'Semua Menu', 'all', '🍰'),

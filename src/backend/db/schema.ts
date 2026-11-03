@@ -53,6 +53,9 @@ export const promotions = sqliteTable("promotions", {
   maxDiscount: integer("max_discount"),
   quota: integer("quota").notNull().default(100),
   usedCount: integer("used_count").notNull().default(0),
+  maxUsagePerUser: integer("max_usage_per_user").notNull().default(1),
+  validFrom: integer("valid_from"),
+  validUntil: integer("valid_until"),
   bannerImageUrl: text("banner_image_url"),
   isBanner: integer("is_banner").notNull().default(0),
   isActive: integer("is_active").notNull().default(1),
@@ -91,4 +94,40 @@ export const orderItems = sqliteTable("order_items", {
   unitPrice: integer("unit_price").notNull(),
   quantity: integer("quantity").notNull(),
   subtotal: integer("subtotal").notNull(),
+});
+
+export const stockLogs = sqliteTable("stock_logs", {
+  id: text("id").primaryKey(),
+  variantId: text("variant_id").notNull(),
+  productId: text("product_id").notNull(),
+  productName: text("product_name").notNull(),
+  variantName: text("variant_name").notNull(),
+  changeType: text("change_type").notNull(), // 'sale' | 'restock' | 'adjustment' | 'cancellation'
+  quantityDelta: integer("quantity_delta").notNull(),
+  previousStock: integer("previous_stock").notNull(),
+  newStock: integer("new_stock").notNull(),
+  referenceId: text("reference_id"), // e.g. orderNumber or adminId
+  notes: text("notes"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const promotionUsages = sqliteTable("promotion_usages", {
+  id: text("id").primaryKey(),
+  promotionId: text("promotion_id").notNull().references(() => promotions.id),
+  orderId: text("order_id").notNull(),
+  orderNumber: text("order_number").notNull(),
+  customerEmail: text("customer_email").notNull(),
+  discountAmount: integer("discount_amount").notNull(),
+  usedAt: integer("used_at").notNull(),
+});
+
+export const customerRetentionActions = sqliteTable("customer_retention_actions", {
+  id: text("id").primaryKey(),
+  customerEmail: text("customer_email").notNull(),
+  customerName: text("customer_name").notNull(),
+  actionType: text("action_type").notNull(), // 'loyalty_voucher' | 'winback_offer' | 'reorder_nudge'
+  promoCode: text("promo_code").notNull(),
+  notes: text("notes"),
+  status: text("status").notNull().default("sent"),
+  createdAt: integer("created_at").notNull(),
 });

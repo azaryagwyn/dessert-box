@@ -15,7 +15,7 @@ interface CartContextType {
   updateQuantity: (variantId: string, quantity: number) => void;
   clearCart: () => void;
   appliedPromo: PromoInfo | null;
-  applyPromo: (code: string) => Promise<{ success: boolean; message: string }>;
+  applyPromo: (code: string, customEmail?: string) => Promise<{ success: boolean; message: string }>;
   removePromo: () => void;
   subtotal: number;
   discountAmount: number;
@@ -66,10 +66,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Recalculate promo if subtotal changes
   useEffect(() => {
     if (appliedPromo && items.length > 0) {
+      let customerEmail = "";
+      try {
+        const u = localStorage.getItem("sweetlayers_auth_user");
+        if (u) customerEmail = JSON.parse(u).email || "";
+      } catch (_) {}
+
       fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: appliedPromo.code, subtotal }),
+        body: JSON.stringify({ code: appliedPromo.code, subtotal, customerEmail }),
       })
         .then((res) => res.json())
         .then((data) => {
@@ -133,7 +139,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (_) {}
   };
 
-  const applyPromo = async (code: string): Promise<{ success: boolean; message: string }> => {
+  const applyPromo = async (code: string, customEmail?: string): Promise<{ success: boolean; message: string }> => {
     if (!code.trim()) {
       return { success: false, message: "Ketikkan kode promo terlebih dahulu" };
     }
@@ -142,10 +148,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
+      let customerEmail = customEmail || "";
+      if (!customerEmail) {
+        try {
+          const u = localStorage.getItem("sweetlayers_auth_user");
+          if (u) customerEmail = JSON.parse(u).email || "";
+        } catch (_) {}
+      }
+
       const res = await fetch("/api/promotions/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, subtotal }),
+        body: JSON.stringify({ code, subtotal, customerEmail }),
       });
 
       const data = await res.json();

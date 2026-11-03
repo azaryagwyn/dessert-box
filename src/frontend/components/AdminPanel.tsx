@@ -20,8 +20,20 @@ import {
   Camera,
   Link2,
   Image as ImageIcon,
+  Tag,
+  Plus,
+  Users,
+  Award,
+  Sparkles,
+  Ban,
+  ArrowRight,
+  Filter,
+  Search,
+  Calendar,
+  History,
+  RotateCcw,
 } from "lucide-react";
-import { Product, Order } from "../types";
+import { Product, Order, StockLog, CustomerCRM, Promotion } from "../types";
 import { useAuth } from "../context/AuthContext";
 
 interface AdminPanelProps {
@@ -40,12 +52,15 @@ interface AdminStats {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }) => {
-  const { user, isAdmin, authFetch, login, openLogin } = useAuth();
+  const { user, isAdmin, authFetch, openLogin } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<"orders" | "stock" | "proxy">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "products" | "stock" | "promos" | "crm" | "proxy">("orders");
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stockLogs, setStockLogs] = useState<StockLog[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [customers, setCustomers] = useState<CustomerCRM[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Variant stock editing state
@@ -59,6 +74,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
   const [editingImageUrlId, setEditingImageUrlId] = useState<string | null>(null);
   const [customImageUrlInput, setCustomImageUrlInput] = useState("");
 
+  // Product Add / Edit Modal state
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: "",
+    categoryId: "cat_choco",
+    basePrice: 48000,
+    originalPrice: 58000,
+    description: "",
+    shortDesc: "",
+    badge: "Menu Baru ✨",
+    temperatureInfo: "Simpan dalam chiller suhu 2-6°C. Tahan 4-5 hari.",
+    imageUrl: "/images/products/belgian-dark-choco.jpg",
+    variantName: "Personal Box (350ml)",
+    stock: 12,
+  });
+
+  // Promo Add Modal state
+  const [isAddPromoOpen, setIsAddPromoOpen] = useState(false);
+  const [newPromo, setNewPromo] = useState({
+    code: "",
+    title: "",
+    description: "",
+    discountType: "percentage" as "percentage" | "fixed",
+    discountValue: 20,
+    minPurchase: 50000,
+    maxDiscount: 25000,
+    quota: 100,
+    maxUsagePerUser: 1,
+  });
+
+  // CRM state
+  const [crmFilterSegment, setCrmFilterSegment] = useState<string>("all");
+  const [crmSearch, setCrmSearch] = useState("");
+  const [crmRetentionMsg, setCrmRetentionMsg] = useState<string | null>(null);
+
+  // Order filter state
+  const [orderFilterStatus, setOrderFilterStatus] = useState<string>("all");
+
   // Proxy state
   const [proxyOrderId, setProxyOrderId] = useState("");
   const [proxyLoading, setProxyLoading] = useState(false);
@@ -67,7 +120,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
   const [proxyFetchLoading, setProxyFetchLoading] = useState(false);
   const [proxyFetchResult, setProxyFetchResult] = useState<any>(null);
 
-  // Handler for uploading product photo from device (auto-compressed to clean WebP/JPEG)
+  // Image File Upload handler
   const handleImageFileUpload = async (productId: string, file: File) => {
     if (!file) return;
     setUploadingProductId(productId);
@@ -95,10 +148,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
           if (!ctx) return;
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Convert to efficient JPEG Data URL
           const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
-          // Save to backend database
           const res = await authFetch(`/api/admin/products/${productId}/image`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -157,14 +208,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     if (!isAdmin) return;
     setLoading(true);
     try {
-      // 1. Read locally cached orders from browser storage (for cross-isolate reliability)
       let localOrders: any[] = [];
       try {
         const raw = localStorage.getItem("sweetlayers_all_orders");
         if (raw) localOrders = JSON.parse(raw);
       } catch (e) {}
 
-      // 2. Sync local orders to backend isolate if any
       if (localOrders.length > 0) {
         await authFetch("/api/admin/sync-orders", {
           method: "POST",
@@ -173,18 +222,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
         }).catch(() => {});
       }
 
-      // 3. Fetch server data
-      const [statsRes, ordersRes, productsRes] = await Promise.all([
+      const [statsRes, ordersRes, productsRes, stockLogsRes, promosRes, crmRes] = await Promise.all([
         authFetch("/api/admin/stats"),
         authFetch("/api/admin/orders"),
         fetch("/api/products"),
+        authFetch("/api/admin/stock-logs"),
+        authFetch("/api/admin/promotions"),
+        authFetch("/api/admin/crm/customers"),
       ]);
 
       let fetchedOrders: any[] = [];
       if (ordersRes.ok) fetchedOrders = await ordersRes.json();
       if (productsRes.ok) setProducts(await productsRes.json());
+      if (stockLogsRes.ok) setStockLogs(await stockLogsRes.json());
+      if (promosRes.ok) setPromotions(await promosRes.json());
+      if (crmRes.ok) setCustomers(await crmRes.json());
 
-      // Merge and deduplicate by orderNumber
       const mergedMap = new Map<string, any>();
       if (Array.isArray(fetchedOrders)) {
         for (const ord of fetchedOrders) {
@@ -198,12 +251,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
           }
         }
       }
+
       const finalOrders = Array.from(mergedMap.values()).sort(
         (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
       );
       setOrders(finalOrders);
 
-      // Recalculate stats with merged orders
       if (statsRes.ok) {
         const serverStats = await statsRes.json();
         const calculatedRevenue = finalOrders
@@ -214,7 +267,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
           ...serverStats,
           totalRevenue: Math.max(serverStats.totalRevenue || 0, calculatedRevenue),
           totalOrders: Math.max(serverStats.totalOrders || 0, finalOrders.length),
-          processingOrders: finalOrders.filter((o) => o.status === "paid").length,
+          processingOrders: finalOrders.filter((o) => o.status === "paid" || o.status === "kitchen_processing").length,
           completedOrders: finalOrders.filter((o) => o.status === "completed").length,
           pendingOrders: finalOrders.filter((o) => o.status === "pending").length,
         });
@@ -234,7 +287,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
 
   const handleUpdateOrderStatus = async (orderId: string, status: string) => {
     try {
-      // Update in localStorage as well
       try {
         const raw = localStorage.getItem("sweetlayers_all_orders");
         if (raw) {
@@ -257,6 +309,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleCancelOrder = async (orderId: string, orderNumber: string) => {
+    if (!confirm(`Batalkan pesanan #${orderNumber}? Stok produk yang dibeli akan dikembalikan secara otomatis ke dapur.`)) return;
+
+    try {
+      const res = await authFetch(`/api/admin/orders/${orderId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Dibatalkan oleh Admin Toko" }),
+      });
+
+      if (res.ok) {
+        setStockSuccessMsg(`Pesanan #${orderNumber} berhasil dibatalkan dan stok dikembalikan!`);
+        setTimeout(() => setStockSuccessMsg(null), 3500);
+
+        try {
+          const raw = localStorage.getItem("sweetlayers_all_orders");
+          if (raw) {
+            const arr = JSON.parse(raw);
+            const updated = arr.map((o: any) =>
+              o.id === orderId || o.orderNumber === orderNumber ? { ...o, status: "cancelled" } : o
+            );
+            localStorage.setItem("sweetlayers_all_orders", JSON.stringify(updated));
+          }
+        } catch (e) {}
+
+        await fetchAdminData();
+        onRefreshData();
+      } else {
+        alert("Gagal membatalkan pesanan.");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
     }
   };
 
@@ -285,60 +372,104 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     }
   };
 
-  const handleCheckProxyStatus = async () => {
-    if (!proxyOrderId) return;
-    setProxyLoading(true);
-    setProxyResult(null);
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      const res = await authFetch("/api/proxy/midtrans/status", {
+      const res = await authFetch("/api/admin/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: proxyOrderId.trim() }),
+        body: JSON.stringify({
+          categoryId: newProduct.categoryId,
+          name: newProduct.name,
+          basePrice: Number(newProduct.basePrice),
+          originalPrice: newProduct.originalPrice ? Number(newProduct.originalPrice) : null,
+          description: newProduct.description || newProduct.name,
+          shortDesc: newProduct.shortDesc || newProduct.name,
+          badge: newProduct.badge,
+          temperatureInfo: newProduct.temperatureInfo,
+          imageUrl: newProduct.imageUrl,
+          variants: [
+            {
+              variantName: newProduct.variantName,
+              additionalPrice: 0,
+              stock: Number(newProduct.stock),
+            },
+          ],
+        }),
       });
-      const data = await res.json();
-      setProxyResult({ status: res.status, data });
+
+      if (res.ok) {
+        setIsAddProductOpen(false);
+        setStockSuccessMsg(`Produk "${newProduct.name}" berhasil ditambahkan ke katalog & stok tercatat!`);
+        setTimeout(() => setStockSuccessMsg(null), 3500);
+        await fetchAdminData();
+        onRefreshData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Gagal menambah produk");
+      }
     } catch (err: any) {
-      setProxyResult({ error: err.message || "Gagal menghubungi proxy" });
-    } finally {
-      setProxyLoading(false);
+      alert("Error: " + err.message);
     }
   };
 
-  const handleProxyCancelOrder = async () => {
-    if (!proxyOrderId) return;
-    if (!confirm(`Batalkan transaksi ${proxyOrderId} di Midtrans via server proxy?`)) return;
-    setProxyLoading(true);
+  const handleCreatePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      const res = await authFetch("/api/proxy/midtrans/cancel", {
+      const res = await authFetch("/api/admin/promotions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: proxyOrderId.trim() }),
+        body: JSON.stringify(newPromo),
       });
-      const data = await res.json();
-      setProxyResult({ status: res.status, data });
+
+      if (res.ok) {
+        setIsAddPromoOpen(false);
+        setStockSuccessMsg(`Voucher promo [${newPromo.code.toUpperCase()}] berhasil dibuat!`);
+        setTimeout(() => setStockSuccessMsg(null), 3500);
+        await fetchAdminData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Gagal membuat promo");
+      }
     } catch (err: any) {
-      setProxyResult({ error: err.message });
-    } finally {
-      setProxyLoading(false);
+      alert("Error: " + err.message);
     }
   };
 
-  const handleTestCustomProxyFetch = async () => {
-    if (!proxyCustomUrl) return;
-    setProxyFetchLoading(true);
-    setProxyFetchResult(null);
+  const handleTogglePromo = async (promoId: string) => {
     try {
-      const res = await authFetch("/api/proxy/fetch", {
+      const res = await authFetch(`/api/admin/promotions/${promoId}/toggle`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        await fetchAdminData();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleSendRetentionAction = async (customer: CustomerCRM, voucherCode: string, actionType: string) => {
+    try {
+      const res = await authFetch("/api/admin/crm/retention", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: proxyCustomUrl.trim() }),
+        body: JSON.stringify({
+          customerEmail: customer.email,
+          customerName: customer.name,
+          promoCode: voucherCode,
+          actionType,
+          notes: `Voucher diskon ${voucherCode} dikirim ke ${customer.name} (${customer.segment})`,
+        }),
       });
-      const data = await res.json();
-      setProxyFetchResult(data);
+
+      if (res.ok) {
+        setCrmRetentionMsg(`Voucher [${voucherCode}] berhasil dikirim ke pelanggan: ${customer.name} (${customer.email})!`);
+        setTimeout(() => setCrmRetentionMsg(null), 4000);
+        await fetchAdminData();
+      }
     } catch (err: any) {
-      setProxyFetchResult({ error: err.message });
-    } finally {
-      setProxyFetchLoading(false);
+      alert("Error: " + err.message);
     }
   };
 
@@ -374,6 +505,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     );
   }
 
+  // Filtered orders
+  const filteredOrders = orders.filter((o) => {
+    if (orderFilterStatus === "all") return true;
+    return o.status === orderFilterStatus;
+  });
+
+  // Filtered CRM customers
+  const filteredCustomers = customers.filter((c) => {
+    const matchesSegment = crmFilterSegment === "all" || c.segment === crmFilterSegment;
+    const matchesSearch =
+      crmSearch.trim() === "" ||
+      c.name.toLowerCase().includes(crmSearch.toLowerCase()) ||
+      c.email.toLowerCase().includes(crmSearch.toLowerCase()) ||
+      (c.phone && c.phone.includes(crmSearch));
+    return matchesSegment && matchesSearch;
+  });
+
   return (
     <div className="bg-slate-900 text-slate-100 rounded-3xl p-6 shadow-2xl border border-slate-800 space-y-6 my-8 animate-fade-in">
       {/* Header */}
@@ -385,14 +533,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-['Playfair_Display',serif] text-2xl font-bold text-white">
-                Panel Pengelola Dapur & Pesanan
+                Panel Pusat Administrator & Dapur
               </h2>
               <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-[10px] font-mono font-bold">
                 ADMIN: {user?.name}
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Database Cloudflare D1 (SQLite) • Monitor Omset, Stok Harian & Proxy Server
+              SweetLayers E-Commerce • Pesanan, Stok, Promosi, CRM & Proxy Gateway
             </p>
           </div>
         </div>
@@ -420,7 +568,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60">
             <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-xs font-semibold">Total Pendapatan</span>
+              <span className="text-xs font-semibold">Total Omset Terverifikasi</span>
               <TrendingUp className="w-4 h-4 text-emerald-400" />
             </div>
             <span className="text-xl font-black text-white">
@@ -430,10 +578,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
 
           <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60">
             <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-xs font-semibold">Total Pesanan</span>
+              <span className="text-xs font-semibold">Total Transaksi</span>
               <ShoppingBag className="w-4 h-4 text-amber-400" />
             </div>
-            <span className="text-xl font-black text-white">{stats.totalOrders} Transaksi</span>
+            <span className="text-xl font-black text-white">{stats.totalOrders} Pesanan</span>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60">
@@ -455,62 +603,129 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
       )}
 
       {/* Tab Navigation */}
-      <div className="flex border-b border-slate-800 gap-4 text-sm font-semibold">
+      <div className="flex border-b border-slate-800 gap-2 sm:gap-4 text-xs sm:text-sm font-semibold overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab("orders")}
-          className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+          className={`pb-3 flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
             activeTab === "orders"
               ? "border-amber-500 text-amber-400"
               : "border-transparent text-slate-400 hover:text-slate-200"
           }`}
         >
           <ShoppingBag className="w-4 h-4" />
-          <span>Kelola Pesanan Masuk ({orders.length})</span>
+          <span>Pesanan ({orders.length})</span>
         </button>
 
         <button
-          onClick={() => setActiveTab("stock")}
-          className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
-            activeTab === "stock"
+          onClick={() => setActiveTab("products")}
+          className={`pb-3 flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === "products"
               ? "border-amber-500 text-amber-400"
               : "border-transparent text-slate-400 hover:text-slate-200"
           }`}
         >
           <Boxes className="w-4 h-4" />
-          <span>Kelola Menu, Foto & Stok Dapur</span>
+          <span>Katalog Produk ({products.length})</span>
         </button>
 
         <button
-          onClick={() => setActiveTab("proxy")}
-          className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
-            activeTab === "proxy"
+          onClick={() => setActiveTab("stock")}
+          className={`pb-3 flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === "stock"
+              ? "border-amber-500 text-amber-400"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <History className="w-4 h-4" />
+          <span>Stok & Audit Trail</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("promos")}
+          className={`pb-3 flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === "promos"
+              ? "border-amber-500 text-amber-400"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <Tag className="w-4 h-4" />
+          <span>Manajemen Promo ({promotions.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("crm")}
+          className={`pb-3 flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === "crm"
               ? "border-purple-500 text-purple-400"
               : "border-transparent text-slate-400 hover:text-slate-200"
           }`}
         >
+          <Users className="w-4 h-4" />
+          <span>CRM & Retensi ({customers.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("proxy")}
+          className={`pb-3 flex items-center gap-1.5 border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === "proxy"
+              ? "border-cyan-500 text-cyan-400"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
           <Server className="w-4 h-4" />
-          <span>Proxy Server & Midtrans Gateway</span>
+          <span>Proxy Gateway</span>
         </button>
       </div>
 
       {/* Success banner */}
       {stockSuccessMsg && (
         <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
-          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{stockSuccessMsg}</span>
         </div>
       )}
 
       {imageSuccessMsg && (
         <div className="p-3 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
-          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{imageSuccessMsg}</span>
         </div>
       )}
 
-      {/* TAB 1: ORDERS LIST */}
+      {crmRetentionMsg && (
+        <div className="p-3 bg-purple-950/80 border border-purple-500/40 text-purple-300 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+          <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+          <span>{crmRetentionMsg}</span>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 1: ORDERS LIST                                       */}
+      {/* ========================================================= */}
       {activeTab === "orders" && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-850 p-3 rounded-2xl border border-slate-800">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400 font-semibold flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5" /> Filter Status:
+              </span>
+              {["all", "pending", "paid", "kitchen_processing", "out_for_delivery", "completed", "cancelled"].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setOrderFilterStatus(st)}
+                  className={`px-2.5 py-1 rounded-lg capitalize font-medium transition ${
+                    orderFilterStatus === st
+                      ? "bg-amber-500 text-slate-950 font-bold"
+                      : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {st.replace(/_/g, " ")}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-slate-400">Menampilkan {filteredOrders.length} pesanan</span>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-slate-800/60 uppercase text-slate-400 tracking-wider">
@@ -518,20 +733,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                   <th className="p-3 rounded-l-xl">No. Pesanan & Waktu</th>
                   <th className="p-3">Pelanggan</th>
                   <th className="p-3">Item Pesanan</th>
-                  <th className="p-3">Total & Pengiriman</th>
+                  <th className="p-3">Total & Metode</th>
                   <th className="p-3">Status</th>
-                  <th className="p-3 rounded-r-xl">Aksi Cepat</th>
+                  <th className="p-3 rounded-r-xl">Aksi Pesanan</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {orders.length === 0 ? (
+                {filteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-slate-500">
-                      Belum ada transaksi pesanan yang tercatat di database.
+                      Tidak ada pesanan dengan filter status "{orderFilterStatus}".
                     </td>
                   </tr>
                 ) : (
-                  orders.map((ord) => (
+                  filteredOrders.map((ord) => (
                     <tr key={ord.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="p-3">
                         <span className="font-mono font-bold text-amber-400 block">
@@ -580,9 +795,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                         <span className="text-[10px] text-slate-400 uppercase block">
                           {ord.deliveryMethod.replace("_", " ")}
                         </span>
-                        {ord.deliveryDate && (
-                          <span className="text-[10px] text-amber-400/80">
-                            {ord.deliveryDate} ({ord.deliveryTimeSlot})
+                        {ord.promoCode && (
+                          <span className="text-[10px] text-emerald-400 block">
+                            Promo: {ord.promoCode} (-Rp {ord.discountAmount.toLocaleString("id-ID")})
                           </span>
                         )}
                       </td>
@@ -592,6 +807,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             ord.status === "paid"
                               ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              : ord.status === "kitchen_processing"
+                              ? "bg-orange-500/20 text-orange-400 border border-orange-500/30"
+                              : ord.status === "out_for_delivery"
+                              ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
                               : ord.status === "completed"
                               ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                               : ord.status === "cancelled"
@@ -604,7 +823,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                       </td>
 
                       <td className="p-3">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {ord.status === "pending" && (
                             <button
                               onClick={() => handleUpdateOrderStatus(ord.id, "paid")}
@@ -616,23 +835,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                           )}
                           {ord.status === "paid" && (
                             <button
-                              onClick={() => handleUpdateOrderStatus(ord.id, "completed")}
-                              className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-bold transition flex items-center gap-1"
-                              title="Tandai Pesanan Selesai Dikirim"
+                              onClick={() => handleUpdateOrderStatus(ord.id, "kitchen_processing")}
+                              className="px-2 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded text-[10px] font-bold transition"
+                              title="Kirim ke Dapur"
                             >
-                              <Truck className="w-3 h-3" />
-                              <span>Selesai</span>
+                              Proses Dapur
                             </button>
                           )}
+                          {ord.status === "kitchen_processing" && (
+                            <button
+                              onClick={() => handleUpdateOrderStatus(ord.id, "out_for_delivery")}
+                              className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-bold transition flex items-center gap-1"
+                              title="Serahkan ke Kurir"
+                            >
+                              <Truck className="w-3 h-3" />
+                              <span>Kirim</span>
+                            </button>
+                          )}
+                          {ord.status === "out_for_delivery" && (
+                            <button
+                              onClick={() => handleUpdateOrderStatus(ord.id, "completed")}
+                              className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-bold transition"
+                              title="Tandai Diterima"
+                            >
+                              Selesai
+                            </button>
+                          )}
+
+                          {ord.status !== "cancelled" && (
+                            <button
+                              onClick={() => handleCancelOrder(ord.id, ord.orderNumber)}
+                              className="px-2 py-1 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded text-[10px] font-semibold transition"
+                              title="Batalkan pesanan & kembalikan stok"
+                            >
+                              <RotateCcw className="w-3 h-3 inline mr-0.5" /> Batal
+                            </button>
+                          )}
+
                           <button
                             onClick={() => {
                               setActiveTab("proxy");
                               setProxyOrderId(ord.orderNumber);
                             }}
-                            className="px-2 py-1 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700/60 rounded text-[10px] transition"
-                            title="Periksa status transaksi di Midtrans melalui proxy"
+                            className="px-1.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
+                            title="Proxy status"
                           >
-                            🛡️ Proxy
+                            🛡️
                           </button>
                         </div>
                       </td>
@@ -645,24 +893,144 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
         </div>
       )}
 
-      {/* TAB 2: MENU, PHOTOS & STOCK MANAGEMENT */}
-      {activeTab === "stock" && (
-        <div className="space-y-4">
-          {/* Info Card on Photo Management */}
-          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/60 flex items-start gap-3">
-            <div className="p-2 bg-amber-900/80 rounded-xl text-amber-300 flex-shrink-0">
-              <ImageIcon className="w-5 h-5" />
+      {/* ========================================================= */}
+      {/* TAB 2: PRODUCTS CRUD & PHOTO MANAGEMENT                   */}
+      {/* ========================================================= */}
+      {activeTab === "products" && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between bg-slate-850 p-4 rounded-2xl border border-slate-800">
+            <div>
+              <h3 className="font-bold text-white text-sm">Katalog Produk & Varian Toko</h3>
+              <p className="text-xs text-slate-400">Tambah menu dessert box baru, ubah harga, atau ganti foto produk.</p>
             </div>
-            <div className="text-xs space-y-1">
-              <h4 className="font-bold text-amber-200">
-                🖼️ Manajemen Aset Foto Menu Asli Toko
-              </h4>
-              <p className="text-amber-300/90 leading-relaxed">
-                Anda dapat mengganti foto menu dummy dengan foto asli buatan Anda. Klik tombol <strong>"Unggah Foto"</strong> untuk memilih file gambar dari laptop/HP (otomatis dioptimasi dan disimpan ke database), atau gunakan tombol rantai <strong>(🔗)</strong> untuk memasukkan path file lokal (misalnya <code className="bg-amber-900/80 px-1 py-0.5 rounded text-amber-200">/images/products/foto-anda.jpg</code>).
-              </p>
-            </div>
+            <button
+              onClick={() => setIsAddProductOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Produk Baru</span>
+            </button>
           </div>
 
+          {/* Add Product Modal Form */}
+          {isAddProductOpen && (
+            <div className="bg-slate-850 p-5 rounded-2xl border border-amber-500/40 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-slate-850 pb-3">
+                <h4 className="font-bold text-sm text-amber-300">Formulir Tambah Dessert Box Baru</h4>
+                <button
+                  onClick={() => setIsAddProductOpen(false)}
+                  className="text-slate-400 hover:text-white text-xs"
+                >
+                  Batal
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateProduct} className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nama Produk *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                    placeholder="Contoh: Pistachio Kunafa Cream Box"
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Kategori *</label>
+                  <select
+                    value={newProduct.categoryId}
+                    onChange={(e) => setNewProduct({ ...newProduct, categoryId: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="cat_choco">Choco Lovers 🍫</option>
+                    <option value="cat_cheese">Cheese & Creamy 🧀</option>
+                    <option value="cat_coffee">Coffee & Tiramisu ☕</option>
+                    <option value="cat_fruity">Fruity Fresh 🍓</option>
+                    <option value="cat_hampers">Hampers & Bundling 🎁</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Harga Dasar (Rp) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={newProduct.basePrice}
+                    onChange={(e) => setNewProduct({ ...newProduct, basePrice: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Harga Coret Promosi (Opsional)</label>
+                  <input
+                    type="number"
+                    value={newProduct.originalPrice}
+                    onChange={(e) => setNewProduct({ ...newProduct, originalPrice: Number(e.target.value) })}
+                    placeholder="Contoh: 58000"
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nama Varian Utama *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newProduct.variantName}
+                    onChange={(e) => setNewProduct({ ...newProduct, variantName: e.target.value })}
+                    placeholder="Personal Box (350ml)"
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Stok Awal Produksi *</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={newProduct.stock}
+                    onChange={(e) => setNewProduct({ ...newProduct, stock: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-300 font-semibold mb-1">Deskripsi Lengkap *</label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={newProduct.description}
+                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                    placeholder="Komposisi bahan, tekstur sponge, mousse, dan kelezatan dessert..."
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddProductOpen(false)}
+                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-md"
+                  >
+                    Simpan Produk ke Database
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Product List Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {products.map((p) => (
               <div
@@ -675,7 +1043,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                       <img
                         src={p.imageUrl}
                         alt={p.name}
-                        className="w-14 h-14 rounded-xl object-cover border border-slate-700 shadow-sm"
+                        className="w-16 h-16 rounded-xl object-cover border border-slate-700 shadow-sm"
                       />
                       <label
                         className="absolute inset-0 bg-black/70 rounded-xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition text-[10px] text-white font-medium"
@@ -695,8 +1063,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                       </label>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-white">{p.name}</h4>
-                      <span className="text-[11px] text-slate-400">Total Stok: {p.totalStock} box</span>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-sm text-white">{p.name}</h4>
+                        {p.badge && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                            {p.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 line-clamp-1">{p.shortDesc}</p>
+                      <span className="text-xs font-bold text-amber-400 block mt-0.5">
+                        Rp {p.basePrice.toLocaleString("id-ID")} • Total Stok: {p.totalStock} box
+                      </span>
                     </div>
                   </div>
 
@@ -707,7 +1085,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">
-                        {uploadingProductId === p.id ? "Menyimpan..." : "Unggah Foto"}
+                        {uploadingProductId === p.id ? "Menyimpan..." : "Foto"}
                       </span>
                       <input
                         type="file"
@@ -732,14 +1110,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                         }
                       }}
                       className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 rounded-xl text-xs transition"
-                      title="Ubah path file lokal atau URL"
+                      title="Ubah URL foto"
                     >
                       <Link2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Custom Path/URL Editor */}
                 {editingImageUrlId === p.id && (
                   <div className="p-2.5 bg-slate-900/90 rounded-xl border border-slate-700 text-xs space-y-2 animate-fade-in">
                     <label className="block text-[11px] text-slate-300 font-semibold">
@@ -750,194 +1127,733 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                         type="text"
                         value={customImageUrlInput}
                         onChange={(e) => setCustomImageUrlInput(e.target.value)}
-                        placeholder="Contoh: /images/products/foto.jpg"
-                        className="flex-1 px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono text-[11px] focus:outline-none focus:border-amber-500"
+                        placeholder="/images/products/nama-file.jpg"
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                       />
                       <button
-                        type="button"
                         onClick={() => handleSaveCustomImageUrl(p.id)}
-                        disabled={uploadingProductId === p.id || !customImageUrlInput.trim()}
-                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition"
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs"
                       >
                         Simpan
                       </button>
                     </div>
                   </div>
                 )}
-
-                {/* Variants stock list */}
-                <div className="space-y-2 pt-2 border-t border-slate-700/60">
-                  {p.variants.map((v) => {
-                    const currentVal = stockEdits[v.id] !== undefined ? stockEdits[v.id] : v.stock;
-                    const hasChanged = stockEdits[v.id] !== undefined && stockEdits[v.id] !== v.stock;
-
-                    return (
-                      <div
-                        key={v.id}
-                        className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/60 text-xs"
-                      >
-                        <div>
-                          <span className="font-semibold text-slate-300 block">{v.variantName}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">{v.sku}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="0"
-                            value={currentVal}
-                            onChange={(e) =>
-                              setStockEdits((prev) => ({
-                                ...prev,
-                                [v.id]: Math.max(0, parseInt(e.target.value) || 0),
-                              }))
-                            }
-                            className="w-16 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-center font-bold text-white focus:outline-none focus:border-amber-500"
-                          />
-
-                          <button
-                            onClick={() => handleSaveVariantStock(v.id)}
-                            disabled={!hasChanged || isSavingStock === v.id}
-                            className={`p-1.5 rounded-lg text-xs font-bold transition-all ${
-                              hasChanged
-                                ? "bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-sm"
-                                : "bg-slate-800 text-slate-500 cursor-not-allowed"
-                            }`}
-                            title="Simpan Perubahan Stok"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* TAB 3: PROXY SERVER MODULE */}
+      {/* ========================================================= */}
+      {/* TAB 3: STOCK & AUDIT TRAIL LOGS                           */}
+      {/* ========================================================= */}
+      {activeTab === "stock" && (
+        <div className="space-y-6">
+          {/* Quick stock editor table */}
+          <div className="bg-slate-850 p-4 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white text-sm">Pengaturan Stok Varian Dapur</h3>
+                <p className="text-xs text-slate-400">Peringatan otomatis muncul jika stok &le; 5 box (kritis) atau 0 (habis).</p>
+              </div>
+              <span className="text-xs text-amber-400 font-semibold">Simpan perubahan langsung ke D1</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-800/80 uppercase text-slate-400 tracking-wider">
+                  <tr>
+                    <th className="p-2.5 rounded-l-xl">Menu & Varian</th>
+                    <th className="p-2.5">Harga Ekstra</th>
+                    <th className="p-2.5">Status Ketersediaan</th>
+                    <th className="p-2.5">Jumlah Stok Box</th>
+                    <th className="p-2.5 rounded-r-xl">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {products.flatMap((p) =>
+                    p.variants.map((v) => {
+                      const currentVal = stockEdits[v.id] !== undefined ? stockEdits[v.id] : v.stock;
+                      const isLow = currentVal > 0 && currentVal <= 5;
+                      const isOut = currentVal === 0;
+
+                      return (
+                        <tr key={v.id} className="hover:bg-slate-800/40">
+                          <td className="p-2.5">
+                            <span className="font-bold text-white block">{p.name}</span>
+                            <span className="text-slate-400 text-[11px]">{v.variantName}</span>
+                          </td>
+                          <td className="p-2.5 font-mono">
+                            {v.additionalPrice > 0 ? `+Rp ${v.additionalPrice.toLocaleString("id-ID")}` : "Standar"}
+                          </td>
+                          <td className="p-2.5">
+                            {isOut ? (
+                              <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">
+                                HABIS
+                              </span>
+                            ) : isLow ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                                KRITIS (&le;5)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                                TERSEDIA
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5">
+                            <input
+                              type="number"
+                              min={0}
+                              value={currentVal}
+                              onChange={(e) =>
+                                setStockEdits({ ...stockEdits, [v.id]: Math.max(0, parseInt(e.target.value) || 0) })
+                              }
+                              className="w-20 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                            />
+                          </td>
+                          <td className="p-2.5">
+                            <button
+                              onClick={() => handleSaveVariantStock(v.id)}
+                              disabled={isSavingStock === v.id || stockEdits[v.id] === undefined || stockEdits[v.id] === v.stock}
+                              className="px-3 py-1.5 bg-amber-500 disabled:opacity-30 disabled:pointer-events-none hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition"
+                            >
+                              {isSavingStock === v.id ? "Menyimpan..." : "Simpan"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Stock Logs / Audit Trail Table */}
+          <div className="bg-slate-850 p-4 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-400" />
+                <h3 className="font-bold text-white text-sm">Riwayat Perubahan Stok (Audit Trail)</h3>
+              </div>
+              <span className="text-[11px] text-slate-400">Dicatat otomatis dari penjualan, restock & pembatalan</span>
+            </div>
+
+            <div className="overflow-x-auto max-h-72">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-800/80 uppercase text-slate-400 tracking-wider sticky top-0">
+                  <tr>
+                    <th className="p-2.5 rounded-l-xl">Waktu</th>
+                    <th className="p-2.5">Produk & Varian</th>
+                    <th className="p-2.5">Jenis Aksi</th>
+                    <th className="p-2.5">Perubahan</th>
+                    <th className="p-2.5">Stok Sebelum &rarr; Sesudah</th>
+                    <th className="p-2.5">Referensi</th>
+                    <th className="p-2.5 rounded-r-xl">Catatan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {stockLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-slate-500">
+                        Belum ada riwayat perubahan stok tercatat.
+                      </td>
+                    </tr>
+                  ) : (
+                    stockLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-800/40">
+                        <td className="p-2.5 text-[11px] text-slate-400">
+                          {new Date(log.createdAt).toLocaleString("id-ID", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="p-2.5">
+                          <span className="font-bold text-white block">{log.productName}</span>
+                          <span className="text-slate-400 text-[11px]">{log.variantName}</span>
+                        </td>
+                        <td className="p-2.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              log.changeType === "sale"
+                                ? "bg-rose-500/20 text-rose-300"
+                                : log.changeType === "cancellation"
+                                ? "bg-blue-500/20 text-blue-300"
+                                : "bg-emerald-500/20 text-emerald-300"
+                            }`}
+                          >
+                            {log.changeType}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-mono font-bold">
+                          {log.quantityDelta > 0 ? (
+                            <span className="text-emerald-400">+{log.quantityDelta}</span>
+                          ) : (
+                            <span className="text-rose-400">{log.quantityDelta}</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 font-mono text-slate-400">
+                          {log.previousStock} &rarr; <span className="text-white font-bold">{log.newStock}</span>
+                        </td>
+                        <td className="p-2.5 font-mono text-slate-400 text-[11px]">
+                          {log.referenceId || "-"}
+                        </td>
+                        <td className="p-2.5 text-slate-400 text-[11px] max-w-xs truncate">
+                          {log.notes}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 4: PROMOTIONS MANAGEMENT                             */}
+      {/* ========================================================= */}
+      {activeTab === "promos" && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between bg-slate-850 p-4 rounded-2xl border border-slate-800">
+            <div>
+              <h3 className="font-bold text-white text-sm">Manajemen Kupon Diskon & Voucher Promo</h3>
+              <p className="text-xs text-slate-400">Kelola kuota, batas penggunaan per pelanggan, dan periode berlaku.</p>
+            </div>
+            <button
+              onClick={() => setIsAddPromoOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Promo Baru</span>
+            </button>
+          </div>
+
+          {/* Add Promo Modal */}
+          {isAddPromoOpen && (
+            <div className="bg-slate-850 p-5 rounded-2xl border border-amber-500/40 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h4 className="font-bold text-sm text-amber-300">Formulir Pembuatan Promo Baru</h4>
+                <button
+                  onClick={() => setIsAddPromoOpen(false)}
+                  className="text-slate-400 hover:text-white text-xs"
+                >
+                  Batal
+                </button>
+              </div>
+
+              <form onSubmit={handleCreatePromo} className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Kode Voucher (Kapital) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newPromo.code}
+                    onChange={(e) => setNewPromo({ ...newPromo, code: e.target.value.toUpperCase().trim() })}
+                    placeholder="Contoh: SWEETWEEKEND"
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Judul Promo *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newPromo.title}
+                    onChange={(e) => setNewPromo({ ...newPromo, title: e.target.value })}
+                    placeholder="Contoh: Diskon 20% Akhir Pekan"
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Jenis Diskon *</label>
+                  <select
+                    value={newPromo.discountType}
+                    onChange={(e) => setNewPromo({ ...newPromo, discountType: e.target.value as any })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="percentage">Persentase (%)</option>
+                    <option value="fixed">Nominal Tetap (Rp)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Nilai Diskon ({newPromo.discountType === "percentage" ? "%" : "Rp"}) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={newPromo.discountValue}
+                    onChange={(e) => setNewPromo({ ...newPromo, discountValue: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Minimal Belanja (Rp)</label>
+                  <input
+                    type="number"
+                    value={newPromo.minPurchase}
+                    onChange={(e) => setNewPromo({ ...newPromo, minPurchase: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Maksimal Diskon (Rp, untuk %)</label>
+                  <input
+                    type="number"
+                    value={newPromo.maxDiscount}
+                    onChange={(e) => setNewPromo({ ...newPromo, maxDiscount: Number(e.target.value) })}
+                    placeholder="Contoh: 25000"
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Total Kuota Penggunaan *</label>
+                  <input
+                    type="number"
+                    required
+                    value={newPromo.quota}
+                    onChange={(e) => setNewPromo({ ...newPromo, quota: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Maks. Penggunaan per Customer *</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={newPromo.maxUsagePerUser}
+                    onChange={(e) => setNewPromo({ ...newPromo, maxUsagePerUser: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddPromoOpen(false)}
+                    className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-md"
+                  >
+                    Buat Voucher Promo
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Promo Table */}
+          <div className="overflow-x-auto bg-slate-850 rounded-2xl border border-slate-800">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-800/80 uppercase text-slate-400 tracking-wider">
+                <tr>
+                  <th className="p-3 rounded-l-xl">Kode Voucher</th>
+                  <th className="p-3">Judul & Keterangan</th>
+                  <th className="p-3">Diskon</th>
+                  <th className="p-3">Min. Belanja</th>
+                  <th className="p-3">Kuota / Terpakai</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 rounded-r-xl">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {promotions.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-800/40">
+                    <td className="p-3">
+                      <span className="font-mono font-bold text-amber-400 block text-sm">{p.code}</span>
+                      <span className="text-[10px] text-slate-400">Max 1x per user</span>
+                    </td>
+                    <td className="p-3">
+                      <span className="font-bold text-white block">{p.title}</span>
+                      <span className="text-slate-400 text-[11px]">{p.description}</span>
+                    </td>
+                    <td className="p-3 font-semibold text-emerald-400">
+                      {p.discountType === "percentage" ? `${p.discountValue}% (Max Rp ${p.maxDiscount?.toLocaleString("id-ID") || "-"})` : `Rp ${p.discountValue.toLocaleString("id-ID")}`}
+                    </td>
+                    <td className="p-3 font-mono">
+                      Rp {p.minPurchase.toLocaleString("id-ID")}
+                    </td>
+                    <td className="p-3">
+                      <span className="font-mono font-bold text-white">{p.usedCount}</span>
+                      <span className="text-slate-400"> / {p.quota} kupon</span>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          p.isActive === 1
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            : "bg-slate-700 text-slate-400"
+                        }`}
+                      >
+                        {p.isActive === 1 ? "AKTIF" : "NON-AKTIF"}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => handleTogglePromo(p.id)}
+                        className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
+                          p.isActive === 1
+                            ? "bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800"
+                            : "bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800"
+                        }`}
+                      >
+                        {p.isActive === 1 ? "Nonaktifkan" : "Aktifkan"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 5: CRM & RETENSI PELANGGAN                            */}
+      {/* ========================================================= */}
+      {activeTab === "crm" && (
+        <div className="space-y-6">
+          {/* Segment KPI cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div
+              onClick={() => setCrmFilterSegment("New Customer")}
+              className={`p-4 rounded-2xl border cursor-pointer transition ${
+                crmFilterSegment === "New Customer"
+                  ? "bg-blue-950/60 border-blue-500"
+                  : "bg-slate-850 border-slate-700/60 hover:border-slate-600"
+              }`}
+            >
+              <div className="flex items-center justify-between text-blue-400 mb-1">
+                <span className="text-xs font-bold uppercase">New Customers</span>
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <span className="text-2xl font-black text-white">
+                {customers.filter((c) => c.segment === "New Customer").length}
+              </span>
+              <p className="text-[10px] text-slate-400 mt-1">Order perdana / pengguna baru</p>
+            </div>
+
+            <div
+              onClick={() => setCrmFilterSegment("Repeat Customer")}
+              className={`p-4 rounded-2xl border cursor-pointer transition ${
+                crmFilterSegment === "Repeat Customer"
+                  ? "bg-purple-950/60 border-purple-500"
+                  : "bg-slate-850 border-slate-700/60 hover:border-slate-600"
+              }`}
+            >
+              <div className="flex items-center justify-between text-purple-400 mb-1">
+                <span className="text-xs font-bold uppercase">Repeat Customers</span>
+                <RotateCcw className="w-4 h-4" />
+              </div>
+              <span className="text-2xl font-black text-white">
+                {customers.filter((c) => c.segment === "Repeat Customer").length}
+              </span>
+              <p className="text-[10px] text-slate-400 mt-1">2-4 kali transaksi aktif</p>
+            </div>
+
+            <div
+              onClick={() => setCrmFilterSegment("Loyal Customer")}
+              className={`p-4 rounded-2xl border cursor-pointer transition ${
+                crmFilterSegment === "Loyal Customer"
+                  ? "bg-amber-950/60 border-amber-500"
+                  : "bg-slate-850 border-slate-700/60 hover:border-slate-600"
+              }`}
+            >
+              <div className="flex items-center justify-between text-amber-400 mb-1">
+                <span className="text-xs font-bold uppercase">Loyal Customers</span>
+                <Award className="w-4 h-4" />
+              </div>
+              <span className="text-2xl font-black text-white">
+                {customers.filter((c) => c.segment === "Loyal Customer").length}
+              </span>
+              <p className="text-[10px] text-slate-400 mt-1">&ge;5 pesanan / LTV &ge;Rp 500k</p>
+            </div>
+
+            <div
+              onClick={() => setCrmFilterSegment("Inactive Customer")}
+              className={`p-4 rounded-2xl border cursor-pointer transition ${
+                crmFilterSegment === "Inactive Customer"
+                  ? "bg-rose-950/60 border-rose-500"
+                  : "bg-slate-850 border-slate-700/60 hover:border-slate-600"
+              }`}
+            >
+              <div className="flex items-center justify-between text-rose-400 mb-1">
+                <span className="text-xs font-bold uppercase">Inactive Customers</span>
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <span className="text-2xl font-black text-white">
+                {customers.filter((c) => c.segment === "Inactive Customer").length}
+              </span>
+              <p className="text-[10px] text-slate-400 mt-1">&gt;30 hari tidak belanja ulang</p>
+            </div>
+          </div>
+
+          {/* CRM Search & Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-850 p-3 rounded-2xl border border-slate-800">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={crmSearch}
+                onChange={(e) => setCrmSearch(e.target.value)}
+                placeholder="Cari nama, email atau WhatsApp pelanggan..."
+                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 w-full sm:w-72"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Filter Segmen:</span>
+              <button
+                onClick={() => setCrmFilterSegment("all")}
+                className={`px-2.5 py-1 rounded-lg font-medium transition ${
+                  crmFilterSegment === "all" ? "bg-purple-600 text-white font-bold" : "bg-slate-800 text-slate-400"
+                }`}
+              >
+                Semua ({customers.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Customer CRM Table */}
+          <div className="overflow-x-auto bg-slate-850 rounded-2xl border border-slate-800">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-800/80 uppercase text-slate-400 tracking-wider">
+                <tr>
+                  <th className="p-3 rounded-l-xl">Profil Pelanggan</th>
+                  <th className="p-3">Total Belanja (LTV)</th>
+                  <th className="p-3">Frekuensi Order</th>
+                  <th className="p-3">Rata-rata Order (AOV)</th>
+                  <th className="p-3">Terakhir Belanja</th>
+                  <th className="p-3">Segmen CRM</th>
+                  <th className="p-3 rounded-r-xl">Tindakan Retensi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {filteredCustomers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-500">
+                      Tidak ada data pelanggan yang sesuai dengan pencarian/filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCustomers.map((cust) => (
+                    <tr key={cust.email} className="hover:bg-slate-800/40">
+                      <td className="p-3">
+                        <span className="font-bold text-white block">{cust.name}</span>
+                        <span className="text-[11px] text-slate-400 block">{cust.email}</span>
+                        {cust.phone && <span className="text-[10px] text-slate-500 font-mono">{cust.phone}</span>}
+                      </td>
+
+                      <td className="p-3 font-bold text-emerald-400 font-mono">
+                        Rp {cust.totalSpent.toLocaleString("id-ID")}
+                      </td>
+
+                      <td className="p-3">
+                        <span className="font-bold text-white block">{cust.totalOrders} Transaksi</span>
+                        <span className="text-[10px] text-slate-400">Verifikasi Lunas</span>
+                      </td>
+
+                      <td className="p-3 font-mono text-slate-300">
+                        Rp {cust.averageOrderValue.toLocaleString("id-ID")}
+                      </td>
+
+                      <td className="p-3 text-[11px] text-slate-400">
+                        {cust.lastOrderDate
+                          ? new Date(cust.lastOrderDate).toLocaleDateString("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "Belum pernah"}
+                      </td>
+
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            cust.segment === "Loyal Customer"
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                              : cust.segment === "Repeat Customer"
+                              ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                              : cust.segment === "Inactive Customer"
+                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                              : "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                          }`}
+                        >
+                          {cust.segment}
+                        </span>
+                      </td>
+
+                      <td className="p-3">
+                        {cust.segment === "Inactive Customer" && (
+                          <button
+                            onClick={() => handleSendRetentionAction(cust, "KANGEN15", "winback_offer")}
+                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                            title="Kirim voucher 15% untuk mengajak belanja kembali"
+                          >
+                            <Send className="w-3 h-3" />
+                            <span>Voucher Kangen 15%</span>
+                          </button>
+                        )}
+
+                        {cust.segment === "Loyal Customer" && (
+                          <button
+                            onClick={() => handleSendRetentionAction(cust, "VIPREWARD", "loyalty_voucher")}
+                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                            title="Kirim voucher apresiasi loyalitas VIP"
+                          >
+                            <Award className="w-3 h-3" />
+                            <span>Apresiasi VIP (20%)</span>
+                          </button>
+                        )}
+
+                        {cust.segment === "Repeat Customer" && (
+                          <button
+                            onClick={() => handleSendRetentionAction(cust, "DESSERT10K", "reorder_nudge")}
+                            className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                            title="Kirim voucher potongan Rp 10.000"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>Kupon Treat 10k</span>
+                          </button>
+                        )}
+
+                        {cust.segment === "New Customer" && (
+                          <button
+                            onClick={() => handleSendRetentionAction(cust, "MANIS20", "welcome_nudge")}
+                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                            title="Kirim voucher selamat datang 20%"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>Voucher Baru 20%</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 6: PROXY & MIDTRANS TOOLS                             */}
+      {/* ========================================================= */}
       {activeTab === "proxy" && (
         <div className="space-y-6">
-          {/* Architecture info banner */}
           <div className="p-4 rounded-2xl bg-purple-950/40 border border-purple-800/60 flex items-start gap-3">
-            <div className="p-2 bg-purple-900/80 rounded-xl text-purple-300 flex-shrink-0">
+            <div className="p-2 bg-purple-900/80 rounded-xl text-purple-300 shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div className="text-xs space-y-1">
               <h4 className="font-bold text-purple-200">
-                SweetLayers Reverse Proxy Engine Active
+                🛡️ Modul Proxy Server & Midtrans API Status
               </h4>
-              <p className="text-purple-300/80 leading-relaxed">
-                Modul Proxy Server (`/api/proxy/*`) mengamankan komunikasi eksternal. Semua kredensial sensitif seperti
-                Midtrans Server Key (<code className="bg-purple-900 px-1 py-0.5 rounded text-purple-200">Mid-server-***</code>)
-                disimpan secara eksklusif di server-side (Cloudflare Pages Functions) sehingga tidak pernah terekspos ke browser
-                klien dan bebas hambatan CORS (Cross-Origin Resource Sharing).
+              <p className="text-purple-300/90 leading-relaxed">
+                Menjaga agar Server Key Midtrans tidak pernah terekspos ke sisi publik / browser frontend. Seluruh verifikasi status transaksi dan pembatalan diproses secara aman melalui backend edge serverless.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Tool 1: Midtrans Gateway Proxy */}
-            <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="text-base">💳</span>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Midtrans Sandbox Proxy Inspector</h3>
-                  <p className="text-[11px] text-slate-400">
-                    Endpoint: <code className="text-amber-400 font-mono">POST /api/proxy/midtrans/status</code>
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Order ID / Nomor Pesanan
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={proxyOrderId}
-                    onChange={(e) => setProxyOrderId(e.target.value)}
-                    placeholder="Contoh: DB-20260920-1234"
-                    className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-purple-500"
-                  />
-                  <button
-                    onClick={handleCheckProxyStatus}
-                    disabled={proxyLoading || !proxyOrderId}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5"
-                  >
-                    {proxyLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    <span>Cek Status</span>
-                  </button>
-                </div>
-              </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Tool 1 */}
+            <div className="p-5 rounded-2xl bg-slate-850 border border-slate-700/60 space-y-3">
+              <h4 className="font-bold text-white text-xs flex items-center gap-2">
+                <Search className="w-4 h-4 text-purple-400" />
+                <span>Cek Status Transaksi Midtrans via Proxy</span>
+              </h4>
               <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={proxyOrderId}
+                  onChange={(e) => setProxyOrderId(e.target.value)}
+                  placeholder="Masukkan Nomor Order (DB-...)"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                />
                 <button
-                  type="button"
-                  onClick={handleProxyCancelOrder}
-                  disabled={proxyLoading || !proxyOrderId}
-                  className="px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800 text-rose-200 border border-rose-700/60 rounded-lg text-xs transition disabled:opacity-50"
+                  onClick={() => {
+                    if (!proxyOrderId) return;
+                    setProxyLoading(true);
+                    authFetch("/api/proxy/midtrans/status", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ orderId: proxyOrderId.trim() }),
+                    })
+                      .then((r) => r.json())
+                      .then((d) => setProxyResult(d))
+                      .finally(() => setProxyLoading(false));
+                  }}
+                  disabled={proxyLoading}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs"
                 >
-                  Batalkan Transaksi via Proxy
+                  {proxyLoading ? "Memeriksa..." : "Cek Status"}
                 </button>
               </div>
 
               {proxyResult && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 overflow-x-auto max-h-60">
-                  <div className="text-amber-400 font-bold mb-1">Response Gateway Proxy:</div>
-                  <pre>{JSON.stringify(proxyResult, null, 2)}</pre>
-                </div>
+                <pre className="p-3 rounded-xl bg-slate-950 font-mono text-[10px] text-emerald-400 overflow-x-auto max-h-40 border border-slate-800">
+                  {JSON.stringify(proxyResult, null, 2)}
+                </pre>
               )}
             </div>
 
-            {/* Tool 2: Outbound Reverse Proxy */}
-            <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <span className="text-base">🌐</span>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Universal Outbound HTTP Proxy</h3>
-                  <p className="text-[11px] text-slate-400">
-                    Endpoint: <code className="text-amber-400 font-mono">POST /api/proxy/fetch</code>
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Target URL (External API / Courier / Webhook)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={proxyCustomUrl}
-                    onChange={(e) => setProxyCustomUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-purple-500"
-                  />
-                  <button
-                    onClick={handleTestCustomProxyFetch}
-                    disabled={proxyFetchLoading || !proxyCustomUrl}
-                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5"
-                  >
-                    {proxyFetchLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    <span>Test Fetch</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-[11px] text-slate-400">
-                Fitur ini dapat digunakan untuk integrasi sistem logistik (tracking kurir instan/sameday) dan verifikasi respon API tanpa memicu CORS di sisi browser.
+            {/* Tool 2 */}
+            <div className="p-5 rounded-2xl bg-slate-850 border border-slate-700/60 space-y-3">
+              <h4 className="font-bold text-white text-xs flex items-center gap-2">
+                <Server className="w-4 h-4 text-cyan-400" />
+                <span>Tester Outbound Safe Proxy (/api/proxy/fetch)</span>
+              </h4>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={proxyCustomUrl}
+                  onChange={(e) => setProxyCustomUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                />
+                <button
+                  onClick={() => {
+                    if (!proxyCustomUrl) return;
+                    setProxyFetchLoading(true);
+                    authFetch("/api/proxy/fetch", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ url: proxyCustomUrl.trim() }),
+                    })
+                      .then((r) => r.json())
+                      .then((d) => setProxyFetchResult(d))
+                      .finally(() => setProxyFetchLoading(false));
+                  }}
+                  disabled={proxyFetchLoading}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs"
+                >
+                  {proxyFetchLoading ? "Testing..." : "Test Proxy"}
+                </button>
               </div>
 
               {proxyFetchResult && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 overflow-x-auto max-h-60">
-                  <div className="text-emerald-400 font-bold mb-1">Hasil Proxy Outbound:</div>
-                  <pre>{JSON.stringify(proxyFetchResult, null, 2)}</pre>
-                </div>
+                <pre className="p-3 rounded-xl bg-slate-950 font-mono text-[10px] text-cyan-400 overflow-x-auto max-h-40 border border-slate-800">
+                  {JSON.stringify(proxyFetchResult, null, 2)}
+                </pre>
               )}
             </div>
           </div>

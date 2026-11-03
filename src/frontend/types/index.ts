@@ -47,6 +47,9 @@ export interface Promotion {
   usedCount: number;
   bannerImageUrl?: string | null;
   isBanner: number;
+  maxUsagePerUser?: number;
+  validFrom?: number | null;
+  validUntil?: number | null;
   isActive: number;
 }
 
@@ -95,4 +98,50 @@ export interface Order {
   snapToken?: string;
   createdAt: number;
   items?: OrderItem[];
+}
+
+export interface StockLog {
+  id: string;
+  variantId: string;
+  productId: string;
+  productName: string;
+  variantName: string;
+  changeType: "sale" | "restock" | "adjustment" | "cancellation";
+  quantityDelta: number;
+  previousStock: number;
+  newStock: number;
+  referenceId?: string;
+  notes?: string;
+  createdAt: number;
+}
+
+export interface CustomerCRM {
+  email: string;
+  name: string;
+  phone?: string;
+  registeredAt?: number;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderDate: number | null;
+  averageOrderValue: number;
+  segment: "New Customer" | "Repeat Customer" | "Loyal Customer" | "Inactive Customer";
+  recentOrders: Order[];
+  retentionActionSent?: boolean;
+}
+
+export interface PromotionUsage {
+  id: string;
+  promotionId: string;
+  orderId: string;
+  orderNumber: string;
+  customerEmail: string;
+  discountAmount: number;
+  usedAt: number;
+}
+
+export interface BusinessModelCanvasBlock {
+  title: string;
+  icon: string;
+  color: string;
+  items: string[];
 }

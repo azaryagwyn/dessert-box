@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://ecommerce.sweetlayers.my.id/</loc>
+    <lastmod>2026-10-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/grand-festive-hamper.jpg</image:loc>
+      <image:title>SweetLayers Grand Festive Hamper 4 Box</image:title>
+      <image:caption>Paket hampers eksklusif dessert box premium SweetLayers Jakarta</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/belgian-dark-choco.jpg</image:loc>
+      <image:title>Belgian Dark Choco Melt Box</image:title>
+      <image:caption>Dessert box sponge cake cokelat lembut dengan mousse Belgian dark chocolate</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/classic-venetian-tiramisu.jpg</image:loc>
+      <image:title>Classic Venetian Tiramisu Box</image:title>
+      <image:caption>Tiramisu otentik dengan espresso single-origin dan krim mascarpone lembut</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/lotus-biscoff-caramel-velvet.jpg</image:loc>
+      <image:title>Lotus Biscoff Caramel Velvet Box</image:title>
+      <image:caption>Dessert box perpaduan biskuit Lotus Biscoff dan saus karamel leleh</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/matcha-basque-cream-cheese.jpg</image:loc>
+      <image:title>Matcha Basque Cream Cheese Box</image:title>
+      <image:caption>Dessert box Uji Matcha premium Jepang berpadu keju basque panggang lembut</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/fresh-strawberry-shortcake.jpg</image:loc>
+      <image:title>Fresh Strawberry Shortcake Box</image:title>
+      <image:caption>Vanilla sponge dengan fresh chantilly cream dan stroberi segar</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/mango-coconut-sago.jpg</image:loc>
+      <image:title>Mango Coconut Sago Jar</image:title>
+      <image:caption>Dessert jar puree mangga harum manis dengan sagu mutiara dan santan creamy</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://ecommerce.sweetlayers.my.id/images/products/red-velvet-dream-cheese.jpg</image:loc>
+      <image:title>Red Velvet Dream Cheese Box</image:title>
+      <image:caption>Kue Red Velvet lembab dengan frosting cream cheese segar</image:caption>
+    </image:image>
+  </url>
+</urlset>

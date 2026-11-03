@@ -9,6 +9,7 @@ import {
   LogOut,
   PackageCheck,
   ChevronDown,
+  Briefcase,
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -18,12 +19,14 @@ interface NavbarProps {
   setIsAdminOpen: (open: boolean) => void;
   onSelectCategory?: (slug: string) => void;
   onOpenOrders: () => void;
+  onOpenBusinessPlan?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   isAdminOpen,
   setIsAdminOpen,
   onOpenOrders,
+  onOpenBusinessPlan,
 }) => {
   const { totalItemCount, setIsCartOpen } = useCart();
   const { user, isAuthenticated, isAdmin, openLogin, logout } = useAuth();
@@ -68,7 +71,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-700">
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-700">
             <a href="#menu-catalog" className="hover:text-amber-600 transition-colors flex items-center gap-1.5">
               <Utensils className="w-4 h-4 text-amber-500" />
               <span>Menu Dessert</span>
@@ -81,6 +84,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Heart className="w-4 h-4 text-rose-400" />
               <span>Keunggulan Kami</span>
             </a>
+            {onOpenBusinessPlan && (
+              <button
+                type="button"
+                onClick={onOpenBusinessPlan}
+                className="hover:text-amber-700 transition-colors flex items-center gap-1.5 font-bold text-amber-800 bg-amber-100/80 hover:bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-300 shadow-2xs text-xs"
+              >
+                <Briefcase className="w-3.5 h-3.5 text-amber-700" />
+                <span>Business Plan & BMC</span>
+              </button>
+            )}
           </nav>
 
           {/* Action Buttons */}

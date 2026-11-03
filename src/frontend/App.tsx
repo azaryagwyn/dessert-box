@@ -19,6 +19,7 @@ import { OrderSuccessModal } from "./components/OrderSuccessModal";
 import { AdminPanel } from "./components/AdminPanel";
 import { AuthModal } from "./components/AuthModal";
 import { CustomerOrdersModal } from "./components/CustomerOrdersModal";
+import { BusinessPlanModal } from "./components/BusinessPlanModal";
 import { CartProvider } from "./context/CartContext";
 import { AuthProvider } from "./context/AuthContext";
 import { Category, Product, Promotion, Order } from "./types";
@@ -33,6 +34,7 @@ export function DessertBoxApp() {
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
+  const [isBusinessPlanOpen, setIsBusinessPlanOpen] = useState(false);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,6 +77,7 @@ export function DessertBoxApp() {
         isAdminOpen={isAdminOpen}
         setIsAdminOpen={setIsAdminOpen}
         onOpenOrders={() => setIsOrdersOpen(true)}
+        onOpenBusinessPlan={() => setIsBusinessPlanOpen(true)}
       />
 
       <main className="flex-1">
@@ -389,6 +392,11 @@ export function DessertBoxApp() {
       <CustomerOrdersModal
         isOpen={isOrdersOpen}
         onClose={() => setIsOrdersOpen(false)}
+      />
+
+      <BusinessPlanModal
+        isOpen={isBusinessPlanOpen}
+        onClose={() => setIsBusinessPlanOpen(false)}
       />
 
       <AuthModal />
