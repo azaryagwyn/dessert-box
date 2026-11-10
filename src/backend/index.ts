@@ -75,6 +75,131 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.use("*", cors());
 
+let schemaMigrationDone = false;
+
+async function ensureDatabaseSchema(d1: D1Database) {
+  if (schemaMigrationDone) return;
+  try {
+    // 1. users table
+    await d1.prepare(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        phone TEXT,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'customer',
+        created_at INTEGER NOT NULL
+      );
+    `).run();
+
+    // 2. ensure columns in orders table
+    const orderCols = await d1.prepare("PRAGMA table_info(orders)").all();
+    const existingOrderCols = new Set((orderCols.results as any[]).map((col: any) => col.name));
+
+    if (!existingOrderCols.has("customer_id")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN customer_id TEXT;").run();
+    }
+    if (!existingOrderCols.has("delivery_method")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN delivery_method TEXT NOT NULL DEFAULT 'instant_courier';").run();
+    }
+    if (!existingOrderCols.has("delivery_address")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN delivery_address TEXT;").run();
+    }
+    if (!existingOrderCols.has("delivery_date")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN delivery_date TEXT;").run();
+    }
+    if (!existingOrderCols.has("delivery_time_slot")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN delivery_time_slot TEXT;").run();
+    }
+    if (!existingOrderCols.has("greeting_card_text")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN greeting_card_text TEXT;").run();
+    }
+    if (!existingOrderCols.has("promo_code")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN promo_code TEXT;").run();
+    }
+    if (!existingOrderCols.has("snap_token")) {
+      await d1.prepare("ALTER TABLE orders ADD COLUMN snap_token TEXT;").run();
+    }
+
+    // 3. ensure columns in promotions table
+    const promoCols = await d1.prepare("PRAGMA table_info(promotions)").all();
+    const existingPromoCols = new Set((promoCols.results as any[]).map((col: any) => col.name));
+
+    if (!existingPromoCols.has("valid_from")) {
+      await d1.prepare("ALTER TABLE promotions ADD COLUMN valid_from INTEGER;").run();
+    }
+    if (!existingPromoCols.has("valid_until")) {
+      await d1.prepare("ALTER TABLE promotions ADD COLUMN valid_until INTEGER;").run();
+    }
+    if (!existingPromoCols.has("max_usage_per_user")) {
+      await d1.prepare("ALTER TABLE promotions ADD COLUMN max_usage_per_user INTEGER NOT NULL DEFAULT 1;").run();
+    }
+
+    // 4. stock_logs table
+    await d1.prepare(`
+      CREATE TABLE IF NOT EXISTS stock_logs (
+        id TEXT PRIMARY KEY,
+        variant_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        variant_name TEXT NOT NULL,
+        change_type TEXT NOT NULL,
+        quantity_delta INTEGER NOT NULL,
+        previous_stock INTEGER NOT NULL,
+        new_stock INTEGER NOT NULL,
+        reference_id TEXT,
+        notes TEXT,
+        created_at INTEGER NOT NULL
+      );
+    `).run();
+
+    // 5. promotion_usages table
+    await d1.prepare(`
+      CREATE TABLE IF NOT EXISTS promotion_usages (
+        id TEXT PRIMARY KEY,
+        promotion_id TEXT NOT NULL,
+        order_id TEXT NOT NULL,
+        order_number TEXT NOT NULL,
+        customer_email TEXT NOT NULL,
+        discount_amount INTEGER NOT NULL,
+        used_at INTEGER NOT NULL
+      );
+    `).run();
+
+    // 6. customer_retention_actions table
+    await d1.prepare(`
+      CREATE TABLE IF NOT EXISTS customer_retention_actions (
+        id TEXT PRIMARY KEY,
+        customer_email TEXT NOT NULL,
+        customer_name TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        promo_code TEXT NOT NULL,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'sent',
+        created_at INTEGER NOT NULL
+      );
+    `).run();
+
+    // 7. Seed default admin if missing
+    await d1.prepare(`
+      INSERT OR IGNORE INTO users (id, name, email, phone, password_hash, role, created_at) VALUES
+      ('usr_admin_1', 'Admin SweetLayers', 'admin@sweetlayers.com', '081234567890', '02f34e4e6b5351afc6ab1163a31aca891937556501c12323ff77d72dbe537543', 'admin', 1726500000000);
+    `).run();
+
+    schemaMigrationDone = true;
+  } catch (err) {
+    console.warn("Schema migration warning:", err);
+  }
+}
+
+app.use("*", async (c, next) => {
+  if (c.env?.DB) {
+    await ensureDatabaseSchema(c.env.DB);
+  }
+  await next();
+});
+
 // Error handler agar respon selalu berupa JSON yang valid (tidak pernah 'Internal Server Error' plain text)
 app.onError((err, c) => {
   console.error("API Unhandled Error:", err);
