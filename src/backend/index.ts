@@ -222,6 +222,55 @@ app.get("/api/test-midtrans", async (c) => {
   }
 });
 
+// Diagnostic D1 Database Route
+app.get("/api/test-d1", async (c) => {
+  if (!c.env?.DB) {
+    return c.json({ error: "c.env.DB is missing!" }, 500);
+  }
+  try {
+    const db = drizzle(c.env.DB, { schema });
+    const rawTables = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+    const ordersCount = await c.env.DB.prepare("SELECT count(*) as count FROM orders").all();
+    const latestOrders = await c.env.DB.prepare("SELECT id, order_number, customer_name, status, created_at FROM orders ORDER BY created_at DESC LIMIT 5").all();
+    
+    let insertTestResult: any = "not_tested";
+    const testOrderId = `test_${Date.now()}`;
+    const testOrderNum = `TEST-${Date.now()}`;
+    try {
+      await db.insert(schema.orders).values({
+        id: testOrderId,
+        orderNumber: testOrderNum,
+        customerId: null,
+        customerName: "D1 Diagnostics",
+        customerPhone: "08123456789",
+        customerEmail: "diagnostics@sweetlayers.com",
+        deliveryMethod: "instant_courier",
+        deliveryAddress: "Jakarta",
+        subtotal: 50000,
+        discountAmount: 0,
+        shippingFee: 0,
+        totalAmount: 50000,
+        status: "pending",
+        createdAt: Date.now(),
+      });
+      insertTestResult = "success";
+      await c.env.DB.prepare("DELETE FROM orders WHERE id = ?").bind(testOrderId).run();
+    } catch (insErr: any) {
+      insertTestResult = { error: insErr.message, stack: insErr.stack };
+    }
+
+    return c.json({
+      hasDB: true,
+      tables: rawTables.results,
+      ordersCount: ordersCount.results,
+      latestOrders: latestOrders.results,
+      insertTestResult,
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message, stack: err.stack }, 500);
+  }
+});
+
 // ==========================================
 // AUTHENTICATION & CUSTOMER ACCOUNT
 // ==========================================
@@ -989,6 +1038,7 @@ app.post("/api/orders/checkout", async (c) => {
 
   memoryOrders.unshift(orderRecord);
 
+  let d1InsertError: string | null = null;
   if (db) {
     try {
       await db.insert(schema.orders).values({
@@ -1027,9 +1077,12 @@ app.post("/api/orders/checkout", async (c) => {
           subtotal: it.subtotal,
         });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn("D1 insert order error:", e);
+      d1InsertError = e?.message || String(e);
     }
+  } else {
+    d1InsertError = "Database D1 instance was not bound or failed to initialize";
   }
 
   return c.json({
@@ -1039,6 +1092,7 @@ app.post("/api/orders/checkout", async (c) => {
     totalAmount,
     snapToken,
     clientKey: c.env?.MIDTRANS_CLIENT_KEY || "Mid-client-2EeEfmUgvLiI7DKV",
+    d1InsertError,
   });
 });
 
