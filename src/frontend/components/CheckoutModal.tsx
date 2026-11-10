@@ -104,9 +104,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
       });
 
       const data = await res.json();
-      setIsLoading(false);
 
       if (!res.ok || !data.success) {
+        setIsLoading(false);
         setErrorMessage(data.error || "Terjadi kesalahan saat memproses pesanan.");
         return;
       }
@@ -128,38 +128,55 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
 
       // Check if Midtrans Snap window object is available in browser
       const snap = (window as any).snap;
-      if (snap && snap.pay && !data.snapToken.startsWith("SNAP-DEMO")) {
-        // Start polling Midtrans every 2.5 seconds while customer pays
-        pollTimer = setInterval(async () => {
-          await checkOrderStatus(data.orderNumber);
-        }, 2500);
+      let snapTriggered = false;
 
-        snap.pay(data.snapToken, {
-          onSuccess: async () => {
-            if (pollTimer) clearInterval(pollTimer);
-            await handlePaymentSuccess(data.orderNumber, "Midtrans Snap Online");
-          },
-          onPending: async () => {
-            if (pollTimer) clearInterval(pollTimer);
-            await handlePaymentSuccess(data.orderNumber, "Midtrans Pending");
-          },
-          onError: () => {
-            if (pollTimer) clearInterval(pollTimer);
-            setErrorMessage("Pembayaran gagal atau dibatalkan oleh pembeli.");
-          },
-          onClose: async () => {
-            if (pollTimer) clearInterval(pollTimer);
-            const isPaid = await checkOrderStatus(data.orderNumber);
-            if (!isPaid) {
-              setSimulationData({
-                orderNumber: data.orderNumber,
-                totalAmount: data.totalAmount,
-                snapToken: data.snapToken,
-              });
-            }
-          },
-        });
-      } else {
+      if (snap && typeof snap.pay === "function" && !data.snapToken.startsWith("SNAP-DEMO")) {
+        try {
+          // Clean up any stale Midtrans popups or overlays lingering in DOM
+          const staleIframe = document.getElementById("snap-midtrans");
+          if (staleIframe) staleIframe.remove();
+          const staleOverlay = document.getElementById("snap-overlay");
+          if (staleOverlay) staleOverlay.remove();
+
+          // Start polling Midtrans every 2.5 seconds while customer pays
+          pollTimer = setInterval(async () => {
+            await checkOrderStatus(data.orderNumber);
+          }, 2500);
+
+          snap.pay(data.snapToken, {
+            onSuccess: async () => {
+              if (pollTimer) clearInterval(pollTimer);
+              await handlePaymentSuccess(data.orderNumber, "Midtrans Snap Online");
+            },
+            onPending: async () => {
+              if (pollTimer) clearInterval(pollTimer);
+              await handlePaymentSuccess(data.orderNumber, "Midtrans Pending");
+            },
+            onError: () => {
+              if (pollTimer) clearInterval(pollTimer);
+              setErrorMessage("Pembayaran gagal atau dibatalkan oleh pembeli.");
+            },
+            onClose: async () => {
+              if (pollTimer) clearInterval(pollTimer);
+              const isPaid = await checkOrderStatus(data.orderNumber);
+              if (!isPaid) {
+                setSimulationData({
+                  orderNumber: data.orderNumber,
+                  totalAmount: data.totalAmount,
+                  snapToken: data.snapToken,
+                });
+              }
+            },
+          });
+          snapTriggered = true;
+        } catch (snapErr: any) {
+          console.warn("Midtrans Snap popup state issue, fallback to simulator:", snapErr);
+          if (pollTimer) clearInterval(pollTimer);
+          snapTriggered = false;
+        }
+      }
+
+      if (!snapTriggered) {
         // Tampilkan Simulator Pembayaran Midtrans Snap (QRIS, VA BCA)
         setSimulationData({
           orderNumber: data.orderNumber,
@@ -167,6 +184,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
           snapToken: data.snapToken,
         });
       }
+      setIsLoading(false);
     } catch (err: any) {
       setIsLoading(false);
       setErrorMessage("Gagal menghubungkan ke server: " + err.message);
