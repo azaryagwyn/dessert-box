@@ -354,7 +354,57 @@ app.get("/api/test-d1", async (c) => {
   }
   try {
     const db = drizzle(c.env.DB, { schema });
+    
+    // Explicitly run migration here to see if it succeeds or why it fails
+    let migrationReport: any = {};
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          phone TEXT,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'customer',
+          created_at INTEGER NOT NULL
+        );
+      `).run();
+      migrationReport.usersTable = "created_or_exists";
+    } catch (e: any) {
+      migrationReport.usersTableError = e.message;
+    }
+
+    try {
+      await c.env.DB.prepare("ALTER TABLE orders ADD COLUMN customer_id TEXT;").run();
+      migrationReport.addCustomerId = "success";
+    } catch (e: any) {
+      migrationReport.addCustomerId = e.message;
+    }
+
+    try {
+      await c.env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS stock_logs (
+          id TEXT PRIMARY KEY,
+          variant_id TEXT NOT NULL,
+          product_id TEXT NOT NULL,
+          product_name TEXT NOT NULL,
+          variant_name TEXT NOT NULL,
+          change_type TEXT NOT NULL,
+          quantity_delta INTEGER NOT NULL,
+          previous_stock INTEGER NOT NULL,
+          new_stock INTEGER NOT NULL,
+          reference_id TEXT,
+          notes TEXT,
+          created_at INTEGER NOT NULL
+        );
+      `).run();
+      migrationReport.stockLogsTable = "created_or_exists";
+    } catch (e: any) {
+      migrationReport.stockLogsError = e.message;
+    }
+
     const rawTables = await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+    const orderPragma = await c.env.DB.prepare("PRAGMA table_info(orders)").all();
     const ordersCount = await c.env.DB.prepare("SELECT count(*) as count FROM orders").all();
     const latestOrders = await c.env.DB.prepare("SELECT id, order_number, customer_name, status, created_at FROM orders ORDER BY created_at DESC LIMIT 5").all();
     
@@ -386,6 +436,8 @@ app.get("/api/test-d1", async (c) => {
 
     return c.json({
       hasDB: true,
+      migrationReport,
+      orderColumns: orderPragma.results,
       tables: rawTables.results,
       ordersCount: ordersCount.results,
       latestOrders: latestOrders.results,
