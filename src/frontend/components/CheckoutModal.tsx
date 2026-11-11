@@ -49,15 +49,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Simulated Payment Modal State (for seamless testing of payment gateway)
-  const [simulationData, setSimulationData] = useState<{
-    orderNumber: string;
-    totalAmount: number;
-    snapToken: string;
-  } | null>(null);
   const [isSimulatingPay, setIsSimulatingPay] = useState(false);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   if (!isOpen) return null;
 
@@ -126,63 +118,54 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
         return false;
       };
 
-      // Check if Midtrans Snap window object is available in browser
+      // Launch Midtrans Snap Popup directly
       const snap = (window as any).snap;
-      let snapTriggered = false;
 
-      if (snap && typeof snap.pay === "function" && !data.snapToken.startsWith("SNAP-DEMO")) {
+      if (snap && typeof snap.pay === "function") {
         try {
-          // Clean up any stale Midtrans popups or overlays lingering in DOM
+          if (typeof snap.hide === "function") {
+            try { snap.hide(); } catch (_) {}
+          }
           const staleIframe = document.getElementById("snap-midtrans");
           if (staleIframe) staleIframe.remove();
           const staleOverlay = document.getElementById("snap-overlay");
           if (staleOverlay) staleOverlay.remove();
 
-          // Start polling Midtrans every 2.5 seconds while customer pays
+          // Poll Midtrans status every 2.5 seconds while customer is completing payment
           pollTimer = setInterval(async () => {
             await checkOrderStatus(data.orderNumber);
           }, 2500);
 
           snap.pay(data.snapToken, {
-            onSuccess: async () => {
+            onSuccess: async (result: any) => {
               if (pollTimer) clearInterval(pollTimer);
-              await handlePaymentSuccess(data.orderNumber, "Midtrans Snap Online");
+              await handlePaymentSuccess(data.orderNumber, result?.payment_type || "Midtrans Snap Online");
             },
-            onPending: async () => {
+            onPending: async (result: any) => {
               if (pollTimer) clearInterval(pollTimer);
-              await handlePaymentSuccess(data.orderNumber, "Midtrans Pending");
+              await handlePaymentSuccess(data.orderNumber, result?.payment_type || "Midtrans Pending");
             },
             onError: () => {
               if (pollTimer) clearInterval(pollTimer);
-              setErrorMessage("Pembayaran gagal atau dibatalkan oleh pembeli.");
+              setErrorMessage("Pembayaran dibatalkan atau gagal diproses oleh gateway.");
             },
             onClose: async () => {
               if (pollTimer) clearInterval(pollTimer);
               const isPaid = await checkOrderStatus(data.orderNumber);
               if (!isPaid) {
-                setSimulationData({
-                  orderNumber: data.orderNumber,
-                  totalAmount: data.totalAmount,
-                  snapToken: data.snapToken,
-                });
+                setErrorMessage("Jendela pembayaran Midtrans ditutup. Anda dapat menekan 'Bayar Sekarang' untuk membuka kembali pembayaran.");
               }
             },
           });
-          snapTriggered = true;
         } catch (snapErr: any) {
-          console.warn("Midtrans Snap popup state issue, fallback to simulator:", snapErr);
+          console.warn("Midtrans Snap error:", snapErr);
           if (pollTimer) clearInterval(pollTimer);
-          snapTriggered = false;
+          // If popup blocked, open Midtrans page in new window
+          window.open(`https://app.sandbox.midtrans.com/snap/v4/redirection/${data.snapToken}`, "_blank");
         }
-      }
-
-      if (!snapTriggered) {
-        // Tampilkan Simulator Pembayaran Midtrans Snap (QRIS, VA BCA)
-        setSimulationData({
-          orderNumber: data.orderNumber,
-          totalAmount: data.totalAmount,
-          snapToken: data.snapToken,
-        });
+      } else {
+        // Fallback: Open Midtrans Snap redirection page in new window
+        window.open(`https://app.sandbox.midtrans.com/snap/v4/redirection/${data.snapToken}`, "_blank");
       }
       setIsLoading(false);
     } catch (err: any) {
@@ -212,7 +195,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
       promoCode: appliedPromo?.code || "",
       status: "paid",
       paymentMethod: method,
-      snapToken: simulationData?.snapToken || "",
       createdAt: Date.now(),
       items: items.map((it) => ({
         productId: it.productId,
@@ -258,7 +240,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
       }
 
       // 3. Close modal & trigger success popup
-      setSimulationData(null);
       onClose();
       onOrderSuccess(paidOrder);
     }
@@ -266,118 +247,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center animate-fade-in">
-      {/* Interactive Payment Gateway Simulator Modal (Popup) */}
-      {simulationData ? (
-        <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-orange-100 p-6 space-y-5 animate-scale-up">
-          <div className="text-center">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-2 text-2xl shadow-inner">
-              <QrCode className="w-8 h-8" />
-            </div>
-            <h3 className="font-['Playfair_Display',serif] text-xl font-bold text-slate-900">
-              Midtrans Payment Gateway
-            </h3>
-            <p className="text-xs text-slate-500">
-              No. Pesanan: <strong className="font-mono text-slate-800">{simulationData.orderNumber}</strong>
-            </p>
-          </div>
-
-          {/* Amount Box */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center">
-            <span className="text-xs text-slate-500 block">Total Tagihan Pembayaran:</span>
-            <span className="text-2xl font-black text-amber-900">
-              Rp {simulationData.totalAmount.toLocaleString("id-ID")}
-            </span>
-          </div>
-
-          {/* Payment Options Preview */}
-          <div className="space-y-2 text-xs">
-            <div className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base">📱</span>
-                <span className="font-bold text-slate-800">QRIS (GoPay, OVO, ShopeePay, BCA)</span>
-              </div>
-              <span className="text-[11px] font-semibold text-emerald-600">Verifikasi Otomatis</span>
-            </div>
-            <div className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base">🏦</span>
-                <span className="font-bold text-slate-800">Virtual Account (BCA, Mandiri, BRI)</span>
-              </div>
-              <span className="text-[11px] font-semibold text-emerald-600">Aktif 24 Jam</span>
-            </div>
-          </div>
-
-          <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-800 leading-relaxed">
-            💡 <strong>Mode Simulasi / Sandbox:</strong> Klik tombol di bawah untuk menyimulasikan pembeli telah sukses membayar via QRIS atau Virtual Account. Sistem akan langsung memverifikasi dan mengurangi stok box secara otomatis.
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={async () => {
-                setIsCheckingStatus(true);
-                try {
-                  const sRes = await fetch(`/api/payment/status/${simulationData.orderNumber}`);
-                  const sData = await sRes.json();
-                  if (sData.success && sData.status === "paid") {
-                    await handlePaymentSuccess(simulationData.orderNumber, sData.payment_type || "Midtrans Online");
-                  } else {
-                    alert(
-                      "Status pembayaran di Midtrans: " +
-                        (sData.status || "Menunggu Pembayaran") +
-                        "\n\nJika Anda sudah bayar di simulator Midtrans Sandbox (QRIS / VA), tunggu 2-3 detik lalu klik tombol ini lagi."
-                    );
-                  }
-                } catch (e: any) {
-                  alert("Gagal mengecek status pembayaran: " + e.message);
-                } finally {
-                  setIsCheckingStatus(false);
-                }
-              }}
-              disabled={isCheckingStatus || isSimulatingPay}
-              className="w-full py-2.5 px-4 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs transition-all flex items-center justify-center gap-2 border border-amber-300 shadow-sm"
-            >
-              {isCheckingStatus ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-800" />
-                  <span>Memeriksa status di Midtrans...</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 text-amber-800" />
-                  <span>Cek Status Pembayaran Midtrans (Otomatis)</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={() => handlePaymentSuccess(simulationData.orderNumber, "QRIS Instant")}
-              disabled={isSimulatingPay || isCheckingStatus}
-              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
-            >
-              {isSimulatingPay ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Memverifikasi Pembayaran...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Simulasikan Pembayaran Sukses (QRIS / VA)</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={() => setSimulationData(null)}
-              className="w-full py-2.5 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors"
-            >
-              Kembali & Ubah Pesanan
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* Main Checkout Form */
-        <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-orange-100 max-h-[92vh] flex flex-col">
+      {/* Main Checkout Form */}
+      <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-orange-100 max-h-[92vh] flex flex-col">
           {/* Header */}
           <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50">
             <div className="flex items-center gap-2.5">
@@ -615,7 +486,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
             </div>
           </form>
         </div>
-      )}
     </div>
   );
 };
