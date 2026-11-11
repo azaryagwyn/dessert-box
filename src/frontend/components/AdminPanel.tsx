@@ -33,6 +33,7 @@ import {
   History,
   RotateCcw,
   Flame,
+  Database,
 } from "lucide-react";
 import { Product, Order, StockLog, CustomerCRM, Promotion } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -111,6 +112,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
   const [crmFilterSegment, setCrmFilterSegment] = useState<string>("all");
   const [crmSearch, setCrmSearch] = useState("");
   const [crmRetentionMsg, setCrmRetentionMsg] = useState<string | null>(null);
+  const [seedingCRM, setSeedingCRM] = useState(false);
 
   // Order filter state
   const [orderFilterStatus, setOrderFilterStatus] = useState<string>("all");
@@ -473,6 +475,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
       }
     } catch (err: any) {
       alert("Error: " + err.message);
+    }
+  };
+
+  const handleInjectDummyCRM = async () => {
+    try {
+      setSeedingCRM(true);
+      const res = await authFetch("/api/admin/crm/seed-dummy", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCrmRetentionMsg(`🎉 Berhasil menginjeksi 30 data dummy pelanggan (New, Repeat, Loyal, Inactive) beserta order!`);
+        setTimeout(() => setCrmRetentionMsg(null), 5000);
+        await fetchAdminData();
+      } else {
+        alert("Gagal menginjeksi data: " + (data.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    } finally {
+      setSeedingCRM(false);
     }
   };
 
@@ -1729,7 +1752,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
               />
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="text-slate-400">Filter Segmen:</span>
               <button
                 onClick={() => setCrmFilterSegment("all")}
@@ -1738,6 +1761,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                 }`}
               >
                 Semua ({customers.length})
+              </button>
+
+              <button
+                onClick={handleInjectDummyCRM}
+                disabled={seedingCRM}
+                className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-500 to-pink-500 hover:from-amber-600 hover:to-pink-600 text-white font-bold rounded-xl text-xs shadow-md transition active:scale-95 disabled:opacity-50 ml-2"
+                title="Inject 30 data dummy (New, Repeat, Loyal, Inactive) beserta riwayat transaksi"
+              >
+                <Database className="w-3.5 h-3.5" />
+                {seedingCRM ? "Menginjeksi..." : "Inject 30 Data Dummy CRM"}
               </button>
             </div>
           </div>

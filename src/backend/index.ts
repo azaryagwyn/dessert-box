@@ -10,6 +10,7 @@ import {
   DEFAULT_PROMOTIONS,
   DEFAULT_USERS,
 } from "./db/initial-data";
+import { buildGeneratedDummyDataset, DUMMY_CUSTOMERS_SPEC } from "./dummy-crm-data";
 import {
   hashPassword,
   verifyPassword,
@@ -2474,6 +2475,109 @@ app.patch("/api/admin/promotions/:id/toggle", async (c) => {
   return c.json({ success: true, promoId, isActive: newStatus });
 });
 
+// Helper: Seed 30 Dummy CRM Profiles (Loyal, Repeat, Inactive, New)
+async function seedDummyCRM(c: any) {
+  const dataset = buildGeneratedDummyDataset(Date.now());
+
+  // 1. Sync memoryUsers
+  for (const u of dataset.users) {
+    const idx = memoryUsers.findIndex((mu) => mu.email.toLowerCase() === u.email.toLowerCase());
+    if (idx === -1) {
+      memoryUsers.push(u);
+    } else {
+      memoryUsers[idx] = { ...memoryUsers[idx], ...u };
+    }
+  }
+
+  // 2. Sync memoryOrders
+  for (const o of dataset.orders) {
+    const idx = memoryOrders.findIndex((mo) => mo.id === o.id || mo.orderNumber === o.orderNumber);
+    const items = dataset.orderItems.filter((it) => it.orderId === o.id);
+    const fullOrder = { ...o, items };
+    if (idx === -1) {
+      memoryOrders.unshift(fullOrder);
+    } else {
+      memoryOrders[idx] = fullOrder;
+    }
+  }
+
+  // 3. Persist to D1 if connected
+  if (c.env?.DB) {
+    try {
+      // Users
+      for (const u of dataset.users) {
+        await c.env.DB.prepare(`
+          INSERT OR REPLACE INTO users (id, name, email, phone, password_hash, role, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind(u.id, u.name, u.email, u.phone, u.passwordHash, u.role, u.createdAt).run();
+      }
+
+      // Orders
+      for (const o of dataset.orders) {
+        await c.env.DB.prepare(`
+          INSERT OR REPLACE INTO orders (
+            id, order_number, customer_id, customer_name, customer_phone, customer_email,
+            delivery_method, delivery_address, delivery_date, delivery_time_slot, greeting_card_text,
+            subtotal, discount_amount, shipping_fee, total_amount, promo_code, status,
+            payment_method, snap_token, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          o.id, o.orderNumber, o.customerId, o.customerName, o.customerPhone, o.customerEmail,
+          o.deliveryMethod, o.deliveryAddress, o.deliveryDate, o.deliveryTimeSlot, o.greetingCardText,
+          o.subtotal, o.discountAmount, o.shippingFee, o.totalAmount, o.promoCode, o.status,
+          o.paymentMethod, o.snapToken, o.createdAt
+        ).run();
+      }
+
+      // Order items
+      for (const it of dataset.orderItems) {
+        await c.env.DB.prepare(`
+          INSERT OR REPLACE INTO order_items (
+            id, order_id, product_id, variant_id, product_name, variant_name, unit_price, quantity, subtotal
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          it.id, it.orderId, it.productId, it.variantId, it.productName, it.variantName, it.unitPrice, it.quantity, it.subtotal
+        ).run();
+      }
+    } catch (e: any) {
+      console.error("D1 seeding error:", e);
+    }
+  }
+
+  return dataset;
+}
+
+// 12g. Seed 30 Dummy CRM Customers Endpoint
+app.post("/api/admin/crm/seed-dummy", async (c) => {
+  try {
+    const dataset = await seedDummyCRM(c);
+    return c.json({
+      success: true,
+      message: "30 Data dummy CRM (New, Repeat, Loyal, Inactive) berhasil diinjeksi!",
+      usersCount: dataset.users.length,
+      ordersCount: dataset.orders.length,
+      itemsCount: dataset.orderItems.length,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+app.get("/api/admin/crm/seed-dummy", async (c) => {
+  try {
+    const dataset = await seedDummyCRM(c);
+    return c.json({
+      success: true,
+      message: "30 Data dummy CRM (New, Repeat, Loyal, Inactive) berhasil diinjeksi!",
+      usersCount: dataset.users.length,
+      ordersCount: dataset.orders.length,
+      itemsCount: dataset.orderItems.length,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 // 12h. Admin CRM Engine: Dynamic Customer Segmentation & Retention
 app.get("/api/admin/crm/customers", async (c) => {
   let allUsers: any[] = memoryUsers.filter((u) => u.role !== "admin");
@@ -2486,6 +2590,24 @@ app.get("/api/admin/crm/customers", async (c) => {
       const oDb = await db.select().from(schema.orders).all();
       if (uDb && uDb.length > 0) allUsers = uDb;
       if (oDb && oDb.length > 0) allOrders = oDb;
+    } catch (e) {}
+  }
+
+  // If there are fewer than 10 customer records, auto-seed the 30 realistic dummy profiles
+  if (allUsers.length < 10) {
+    try {
+      await seedDummyCRM(c);
+      allUsers = memoryUsers.filter((u) => u.role !== "admin");
+      allOrders = memoryOrders;
+      if (c.env?.DB) {
+        try {
+          const db = drizzle(c.env.DB, { schema });
+          const uDb = await db.select().from(schema.users).where(eq(schema.users.role, "customer")).all();
+          const oDb = await db.select().from(schema.orders).all();
+          if (uDb && uDb.length > 0) allUsers = uDb;
+          if (oDb && oDb.length > 0) allOrders = oDb;
+        } catch (e) {}
+      }
     } catch (e) {}
   }
 
