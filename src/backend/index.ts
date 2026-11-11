@@ -2436,19 +2436,64 @@ app.put("/api/admin/promotions/:id", async (c) => {
   const promoId = c.req.param("id");
   const body = await c.req.json<any>();
 
+  const updateFields: any = {};
+  if (body.code !== undefined) updateFields.code = body.code.toUpperCase().trim();
+  if (body.title !== undefined) updateFields.title = body.title.trim();
+  if (body.description !== undefined) updateFields.description = body.description;
+  if (body.discountType !== undefined) updateFields.discountType = body.discountType;
+  if (body.discountValue !== undefined) updateFields.discountValue = Number(body.discountValue);
+  if (body.minPurchase !== undefined) updateFields.minPurchase = Number(body.minPurchase) || 0;
+  if (body.maxDiscount !== undefined) updateFields.maxDiscount = body.maxDiscount ? Number(body.maxDiscount) : null;
+  if (body.quota !== undefined) updateFields.quota = Number(body.quota) || 100;
+  if (body.maxUsagePerUser !== undefined) updateFields.maxUsagePerUser = Number(body.maxUsagePerUser) || 1;
+  if (body.validFrom !== undefined) updateFields.validFrom = Number(body.validFrom);
+  if (body.validUntil !== undefined) updateFields.validUntil = Number(body.validUntil);
+  if (body.bannerImageUrl !== undefined) updateFields.bannerImageUrl = body.bannerImageUrl;
+  if (body.isBanner !== undefined) updateFields.isBanner = body.isBanner ? 1 : 0;
+  if (body.isActive !== undefined) updateFields.isActive = body.isActive ? 1 : 0;
+  if (body.targetSegment !== undefined) updateFields.targetSegment = body.targetSegment;
+  if (body.targetCustomerEmail !== undefined) updateFields.targetCustomerEmail = body.targetCustomerEmail ? body.targetCustomerEmail.toLowerCase().trim() : null;
+
   const idx = memoryPromotions.findIndex((p) => p.id === promoId);
   if (idx > -1) {
-    memoryPromotions[idx] = { ...memoryPromotions[idx], ...body };
+    memoryPromotions[idx] = { ...memoryPromotions[idx], ...updateFields };
   }
 
   if (c.env?.DB) {
     try {
       const db = drizzle(c.env.DB, { schema });
-      await db.update(schema.promotions).set(body).where(eq(schema.promotions.id, promoId));
-    } catch (e) {}
+      await db.update(schema.promotions).set(updateFields).where(eq(schema.promotions.id, promoId));
+    } catch (e: any) {
+      console.warn("D1 update promo error:", e);
+    }
   }
 
-  return c.json({ success: true, message: "Promo berhasil diperbarui!" });
+  return c.json({ success: true, message: "Promo berhasil diperbarui!", promo: idx > -1 ? memoryPromotions[idx] : null });
+});
+
+app.delete("/api/admin/promotions/:id", async (c) => {
+  const promoId = c.req.param("id");
+
+  const idx = memoryPromotions.findIndex((p) => p.id === promoId);
+  let deletedCode = promoId;
+  if (idx > -1) {
+    deletedCode = memoryPromotions[idx].code;
+    memoryPromotions.splice(idx, 1);
+  }
+
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      await db.delete(schema.promotions).where(eq(schema.promotions.id, promoId));
+      try {
+        await c.env.DB.prepare("DELETE FROM promotion_usages WHERE promotion_id = ?").bind(promoId).run();
+      } catch (_) {}
+    } catch (e: any) {
+      console.warn("D1 delete promo error:", e);
+    }
+  }
+
+  return c.json({ success: true, message: `Promo [${deletedCode}] berhasil dihapus!` });
 });
 
 app.patch("/api/admin/promotions/:id/toggle", async (c) => {

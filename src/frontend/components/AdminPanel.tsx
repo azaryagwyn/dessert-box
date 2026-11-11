@@ -34,6 +34,8 @@ import {
   RotateCcw,
   Flame,
   Database,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { Product, Order, StockLog, CustomerCRM, Promotion } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -106,6 +108,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     maxUsagePerUser: 1,
     targetSegment: "all" as "all" | "new" | "repeat" | "loyal" | "inactive" | "specific_email",
     targetCustomerEmail: "",
+  });
+
+  // Promo Edit Modal state
+  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
+  const [editPromoForm, setEditPromoForm] = useState<any>({
+    code: "",
+    title: "",
+    description: "",
+    discountType: "percentage" as "percentage" | "fixed",
+    discountValue: 20,
+    minPurchase: 50000,
+    maxDiscount: 25000,
+    quota: 100,
+    maxUsagePerUser: 1,
+    targetSegment: "all",
+    targetCustomerEmail: "",
+    isActive: 1,
   });
 
   // CRM state
@@ -451,6 +470,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleStartEditPromo = (promo: Promotion) => {
+    setEditingPromo(promo);
+    setEditPromoForm({
+      code: promo.code,
+      title: promo.title,
+      description: promo.description || "",
+      discountType: promo.discountType,
+      discountValue: promo.discountValue,
+      minPurchase: promo.minPurchase || 0,
+      maxDiscount: promo.maxDiscount || "",
+      quota: promo.quota || 100,
+      maxUsagePerUser: promo.maxUsagePerUser || 1,
+      targetSegment: promo.targetSegment || "all",
+      targetCustomerEmail: promo.targetCustomerEmail || "",
+      isActive: promo.isActive,
+    });
+    setIsAddPromoOpen(false);
+  };
+
+  const handleSaveEditPromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPromo) return;
+
+    try {
+      const res = await authFetch(`/api/admin/promotions/${editingPromo.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editPromoForm),
+      });
+
+      if (res.ok) {
+        setStockSuccessMsg(`Voucher promo [${editPromoForm.code.toUpperCase()}] berhasil diperbarui!`);
+        setTimeout(() => setStockSuccessMsg(null), 3500);
+        setEditingPromo(null);
+        await fetchAdminData();
+        onRefreshData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Gagal memperbarui voucher promo");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  const handleDeletePromo = async (promo: Promotion) => {
+    const confirmDelete = window.confirm(
+      `Apakah Anda yakin ingin menghapus voucher promo [${promo.code}] "${promo.title}" secara permanen?`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      const res = await authFetch(`/api/admin/promotions/${promo.id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setStockSuccessMsg(`Voucher promo [${promo.code}] berhasil dihapus!`);
+        setTimeout(() => setStockSuccessMsg(null), 3500);
+        if (editingPromo?.id === promo.id) setEditingPromo(null);
+        await fetchAdminData();
+        onRefreshData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Gagal menghapus voucher promo");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
     }
   };
 
@@ -1558,6 +1648,204 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
             </div>
           )}
 
+          {/* Edit Promo Modal */}
+          {editingPromo && (
+            <div className="bg-slate-850 p-5 rounded-2xl border border-amber-500/60 space-y-4 animate-fade-in shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+                    <Pencil className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-sm text-amber-300">
+                      Edit Voucher Promo: <span className="font-mono text-white underline">{editingPromo.code}</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">Ubah detail diskon, kuota, atau segmen target voucher ini.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditingPromo(null)}
+                  className="text-slate-400 hover:text-white text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg transition"
+                >
+                  Batal
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditPromo} className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Kode Voucher (Kapital) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPromoForm.code}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, code: e.target.value.toUpperCase().trim() })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Judul Promo *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPromoForm.title}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, title: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-300 font-semibold mb-1">Keterangan / Deskripsi Promo</label>
+                  <input
+                    type="text"
+                    value={editPromoForm.description}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, description: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Jenis Diskon *</label>
+                  <select
+                    value={editPromoForm.discountType}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, discountType: e.target.value as any })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="percentage">Persentase (%)</option>
+                    <option value="fixed">Nominal Tetap (Rp)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Nilai Diskon ({editPromoForm.discountType === "percentage" ? "%" : "Rp"}) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={editPromoForm.discountValue}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, discountValue: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Minimal Belanja (Rp)</label>
+                  <input
+                    type="number"
+                    value={editPromoForm.minPurchase}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, minPurchase: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Maksimal Diskon (Rp, untuk %)</label>
+                  <input
+                    type="number"
+                    value={editPromoForm.maxDiscount}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, maxDiscount: e.target.value ? Number(e.target.value) : "" })}
+                    placeholder="Kosongkan jika tidak dibatasi"
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Total Kuota Penggunaan *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editPromoForm.quota}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, quota: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Maks. Penggunaan per Customer *</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editPromoForm.maxUsagePerUser}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, maxUsagePerUser: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Target Segmen Pelanggan *</label>
+                  <select
+                    value={editPromoForm.targetSegment}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, targetSegment: e.target.value as any })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="all">Semua Pelanggan (Publik)</option>
+                    <option value="new">New Customer (Pelanggan Baru / Pertama Kali)</option>
+                    <option value="repeat">Repeat Customer (Pernah Order Sebelumnya)</option>
+                    <option value="loyal">Loyal Customer (VIP Pelanggan Setia)</option>
+                    <option value="inactive">Inactive Customer (Reaktivasi 'Kami Rindu Kamu')</option>
+                    <option value="specific_email">Email Pelanggan Tertentu (Eksklusif)</option>
+                  </select>
+                </div>
+
+                {editPromoForm.targetSegment === "specific_email" && (
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Email Pelanggan Tertentu *</label>
+                    <input
+                      type="email"
+                      required
+                      value={editPromoForm.targetCustomerEmail}
+                      onChange={(e) => setEditPromoForm({ ...editPromoForm, targetCustomerEmail: e.target.value })}
+                      placeholder="contoh: customer@email.com"
+                      className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Status Keaktifan *</label>
+                  <select
+                    value={editPromoForm.isActive}
+                    onChange={(e) => setEditPromoForm({ ...editPromoForm, isActive: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value={1}>Aktif (Dapat Digunakan Customer)</option>
+                    <option value={0}>Nonaktif (Ditangguhkan)</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2 flex justify-between items-center gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePromo(editingPromo)}
+                    className="px-4 py-2 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 rounded-xl transition flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Promo</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPromo(null)}
+                      className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl shadow-md transition flex items-center gap-1.5"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>Simpan Perubahan</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
+
           {/* Promo Table */}
           <div className="overflow-x-auto bg-slate-850 rounded-2xl border border-slate-800">
             <table className="w-full text-left text-xs text-slate-300">
@@ -1640,16 +1928,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                       </span>
                     </td>
                     <td className="p-3">
-                      <button
-                        onClick={() => handleTogglePromo(p.id)}
-                        className={`px-2.5 py-1 rounded text-[10px] font-bold transition ${
-                          p.isActive === 1
-                            ? "bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800"
-                            : "bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800"
-                        }`}
-                      >
-                        {p.isActive === 1 ? "Nonaktifkan" : "Aktifkan"}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleTogglePromo(p.id)}
+                          className={`px-2 py-1 rounded text-[10px] font-bold transition ${
+                            p.isActive === 1
+                              ? "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                              : "bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800"
+                          }`}
+                          title={p.isActive === 1 ? "Klik untuk nonaktifkan promo" : "Klik untuk aktifkan promo"}
+                        >
+                          {p.isActive === 1 ? "Aktif" : "Mati"}
+                        </button>
+                        <button
+                          onClick={() => handleStartEditPromo(p)}
+                          className="p-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition"
+                          title="Edit rincian promo"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePromo(p)}
+                          className="p-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition"
+                          title="Hapus promo permanen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
