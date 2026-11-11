@@ -17,6 +17,8 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
       try {
         localStorage.removeItem("sweetlayers_cart");
         localStorage.removeItem("sweetlayers_promo");
+        localStorage.setItem("sweetlayers_cart", "[]");
+        window.dispatchEvent(new Event("cart_updated"));
       } catch (_) {}
     }
   }, [order]);
@@ -25,6 +27,12 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
 
   const handleClose = () => {
     clearCart();
+    try {
+      localStorage.removeItem("sweetlayers_cart");
+      localStorage.removeItem("sweetlayers_promo");
+      localStorage.setItem("sweetlayers_cart", "[]");
+      window.dispatchEvent(new Event("cart_updated"));
+    } catch (_) {}
     onClose();
   };
 

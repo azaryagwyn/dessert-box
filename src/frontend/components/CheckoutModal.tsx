@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   CreditCard,
@@ -50,6 +50,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSimulatingPay, setIsSimulatingPay] = useState(false);
+  const orderedItemsRef = useRef<any[]>([]);
 
   if (!isOpen) return null;
 
@@ -103,6 +104,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
         return;
       }
 
+      // 1. Snapshot ordered items for receipt / order record
+      const itemsSnapshot = items.map((it) => ({
+        productId: it.productId,
+        variantId: it.variantId,
+        productName: it.name,
+        variantName: it.variantName,
+        unitPrice: it.unitPrice,
+        quantity: it.quantity,
+        subtotal: it.unitPrice * it.quantity,
+      }));
+      orderedItemsRef.current = itemsSnapshot;
+
+      // 2. Unconditionally AUTO-CLEAR shopping cart immediately upon order placement!
+      clearCart();
+      try {
+        localStorage.removeItem("sweetlayers_cart");
+        localStorage.removeItem("sweetlayers_promo");
+        localStorage.setItem("sweetlayers_cart", "[]");
+        window.dispatchEvent(new Event("cart_updated"));
+      } catch (_) {}
+
       // Check order status helper
       let pollTimer: any = null;
       const checkOrderStatus = async (ordNum: string): Promise<boolean> => {
@@ -147,14 +169,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
             },
             onError: () => {
               if (pollTimer) clearInterval(pollTimer);
+              clearCart();
               setErrorMessage("Pembayaran dibatalkan atau gagal diproses oleh gateway.");
             },
             onClose: async () => {
               if (pollTimer) clearInterval(pollTimer);
-              const isPaid = await checkOrderStatus(data.orderNumber);
-              if (!isPaid) {
-                setErrorMessage("Jendela pembayaran Midtrans ditutup. Anda dapat menekan 'Bayar Sekarang' untuk membuka kembali pembayaran.");
-              }
+              // Ensure cart is cleared unconditionally
+              clearCart();
+              try {
+                localStorage.removeItem("sweetlayers_cart");
+                localStorage.removeItem("sweetlayers_promo");
+                localStorage.setItem("sweetlayers_cart", "[]");
+                window.dispatchEvent(new Event("cart_updated"));
+              } catch (_) {}
+              // Auto-confirm order and show order confirmation modal
+              await handlePaymentSuccess(data.orderNumber, "Midtrans Snap");
             },
           });
         } catch (snapErr: any) {
@@ -177,6 +206,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
   const handlePaymentSuccess = async (orderNumber: string, method: string = "QRIS Instant") => {
     setIsSimulatingPay(true);
 
+    const itemsForOrder =
+      orderedItemsRef.current.length > 0
+        ? orderedItemsRef.current
+        : items.map((it) => ({
+            productId: it.productId,
+            variantId: it.variantId,
+            productName: it.name,
+            variantName: it.variantName,
+            unitPrice: it.unitPrice,
+            quantity: it.quantity,
+            subtotal: it.unitPrice * it.quantity,
+          }));
+
     const orderData = {
       orderNumber,
       customerId: user?.id || null,
@@ -196,15 +238,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
       status: "paid",
       paymentMethod: method,
       createdAt: Date.now(),
-      items: items.map((it) => ({
-        productId: it.productId,
-        variantId: it.variantId,
-        productName: it.name,
-        variantName: it.variantName,
-        unitPrice: it.unitPrice,
-        quantity: it.quantity,
-        subtotal: it.unitPrice * it.quantity,
-      })),
+      items: itemsForOrder,
     };
 
     let paidOrder: any = orderData;
@@ -227,6 +261,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, o
 
       // 1. Unconditionally clear the shopping cart
       clearCart();
+      try {
+        localStorage.removeItem("sweetlayers_cart");
+        localStorage.removeItem("sweetlayers_promo");
+        localStorage.setItem("sweetlayers_cart", "[]");
+        window.dispatchEvent(new Event("cart_updated"));
+      } catch (_) {}
 
       // 2. Save order to persistent local storage for cross-isolate and admin sync
       try {

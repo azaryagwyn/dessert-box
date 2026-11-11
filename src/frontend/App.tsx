@@ -20,11 +20,12 @@ import { AdminPanel } from "./components/AdminPanel";
 import { AuthModal } from "./components/AuthModal";
 import { CustomerOrdersModal } from "./components/CustomerOrdersModal";
 import { BusinessPlanModal } from "./components/BusinessPlanModal";
-import { CartProvider } from "./context/CartContext";
+import { CartProvider, useCart } from "./context/CartContext";
 import { AuthProvider } from "./context/AuthContext";
 import { Category, Product, Promotion, Order } from "./types";
 
 export function DessertBoxApp() {
+  const { clearCart } = useCart();
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -395,6 +396,13 @@ export function DessertBoxApp() {
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
         onOrderSuccess={(order) => {
+          clearCart();
+          try {
+            localStorage.removeItem("sweetlayers_cart");
+            localStorage.removeItem("sweetlayers_promo");
+            localStorage.setItem("sweetlayers_cart", "[]");
+            window.dispatchEvent(new Event("cart_updated"));
+          } catch (_) {}
           setSuccessOrder(order);
           fetchData(); // Refresh stock in real time
         }}

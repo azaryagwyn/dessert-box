@@ -52,6 +52,26 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("sweetlayers_cart", JSON.stringify(items));
   }, [items]);
 
+  // Sync cart across custom events and browser tabs
+  useEffect(() => {
+    const handleCartSync = () => {
+      try {
+        const saved = localStorage.getItem("sweetlayers_cart");
+        const parsed = saved ? JSON.parse(saved) : [];
+        setItems(parsed);
+      } catch {
+        setItems([]);
+      }
+    };
+
+    window.addEventListener("storage", handleCartSync);
+    window.addEventListener("cart_updated", handleCartSync);
+    return () => {
+      window.removeEventListener("storage", handleCartSync);
+      window.removeEventListener("cart_updated", handleCartSync);
+    };
+  }, []);
+
   useEffect(() => {
     if (appliedPromo) {
       localStorage.setItem("sweetlayers_promo", JSON.stringify(appliedPromo));
@@ -136,6 +156,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       localStorage.removeItem("sweetlayers_cart");
       localStorage.removeItem("sweetlayers_promo");
+      localStorage.setItem("sweetlayers_cart", "[]");
+      window.dispatchEvent(new Event("cart_updated"));
     } catch (_) {}
   };
 
