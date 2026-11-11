@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Minus, Plus, ShoppingBag, ThermometerSnowflake, Check } from "lucide-react";
+import { X, Minus, Plus, ShoppingBag, ThermometerSnowflake, Check, Flame } from "lucide-react";
 import { Product, ProductVariant } from "../types";
 import { StockBadge } from "./StockBadge";
 import { useCart } from "../context/CartContext";
@@ -173,6 +173,16 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose }) 
               />
             </div>
           </div>
+
+          {/* Notifikasi Stok Kritis / Hampir Habis */}
+          {selectedVariant && selectedVariant.stock > 0 && selectedVariant.stock <= 5 && (
+            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-300 text-amber-900 text-xs font-semibold animate-pulse">
+              <Flame className="w-4 h-4 text-amber-600 fill-amber-500 shrink-0" />
+              <span>
+                🔥 <strong>Stok Hampir Habis!</strong> Sisa hanya <strong>{selectedVariant.stock} box</strong> untuk varian "{selectedVariant.variantName}". Segera selesaikan pesanan sebelum kehabisan!
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Footer with Price and Add to Cart */}

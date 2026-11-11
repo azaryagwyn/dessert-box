@@ -54,7 +54,9 @@ CREATE TABLE IF NOT EXISTS promotions (
   used_count INTEGER NOT NULL DEFAULT 0,
   banner_image_url TEXT,
   is_banner INTEGER NOT NULL DEFAULT 0,
-  is_active INTEGER NOT NULL DEFAULT 1
+  is_active INTEGER NOT NULL DEFAULT 1,
+  target_segment TEXT DEFAULT 'all',
+  target_customer_email TEXT
 );
 
 CREATE TABLE IF NOT EXISTS orders (

@@ -32,6 +32,7 @@ import {
   Calendar,
   History,
   RotateCcw,
+  Flame,
 } from "lucide-react";
 import { Product, Order, StockLog, CustomerCRM, Promotion } from "../types";
 import { useAuth } from "../context/AuthContext";
@@ -102,6 +103,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     maxDiscount: 25000,
     quota: 100,
     maxUsagePerUser: 1,
+    targetSegment: "all" as "all" | "new" | "repeat" | "loyal" | "inactive" | "specific_email",
+    targetCustomerEmail: "",
   });
 
   // CRM state
@@ -601,6 +604,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
           </div>
         </div>
       )}
+
+      {/* Alert Banner: Notifikasi Stok Hampir Habis untuk Admin */}
+      {(() => {
+        const lowStockVariants = products.flatMap((p) =>
+          p.variants
+            .filter((v) => v.stock <= 5)
+            .map((v) => ({ ...v, productName: p.name }))
+        );
+        if (lowStockVariants.length === 0) return null;
+
+        return (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+                <Flame className="w-5 h-5 text-amber-400 fill-amber-500 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-amber-300 flex items-center gap-2">
+                  <span>Peringatan Stok Dapur Kritis!</span>
+                  <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px]">
+                    {lowStockVariants.length} Varian Butuh Restock
+                  </span>
+                </h4>
+                <p className="text-[11px] text-amber-200/80 mt-0.5">
+                  {lowStockVariants
+                    .slice(0, 4)
+                    .map((v) => `${v.productName} (${v.variantName}: sisa ${v.stock} box)`)
+                    .join(" • ")}
+                  {lowStockVariants.length > 4 && ` ...dan ${lowStockVariants.length - 4} lainnya`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab("stock")}
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shrink-0 transition shadow-md flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Kelola Stok Varian &rarr;</span>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Tab Navigation */}
       <div className="flex border-b border-slate-800 gap-2 sm:gap-4 text-xs sm:text-sm font-semibold overflow-x-auto no-scrollbar">
@@ -1441,6 +1486,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                   />
                 </div>
 
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Target Segmen Pelanggan *</label>
+                  <select
+                    value={newPromo.targetSegment}
+                    onChange={(e) => setNewPromo({ ...newPromo, targetSegment: e.target.value as any })}
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="all">Semua Pelanggan (Publik)</option>
+                    <option value="new">New Customer (Pelanggan Baru / Pertama Kali)</option>
+                    <option value="repeat">Repeat Customer (Pernah Order Sebelumnya)</option>
+                    <option value="loyal">Loyal Customer (VIP Pelanggan Setia)</option>
+                    <option value="inactive">Inactive Customer (Reaktivasi 'Kami Rindu Kamu')</option>
+                    <option value="specific_email">Email Pelanggan Tertentu (Eksklusif)</option>
+                  </select>
+                </div>
+
+                {newPromo.targetSegment === "specific_email" && (
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Email Pelanggan Tertentu *</label>
+                    <input
+                      type="email"
+                      required
+                      value={newPromo.targetCustomerEmail}
+                      onChange={(e) => setNewPromo({ ...newPromo, targetCustomerEmail: e.target.value })}
+                      placeholder="contoh: customer@email.com"
+                      className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                )}
+
                 <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
                   <button
                     type="button"
@@ -1470,6 +1545,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                   <th className="p-3">Diskon</th>
                   <th className="p-3">Min. Belanja</th>
                   <th className="p-3">Kuota / Terpakai</th>
+                  <th className="p-3">Target Segmen</th>
                   <th className="p-3">Status</th>
                   <th className="p-3 rounded-r-xl">Aksi</th>
                 </tr>
@@ -1494,6 +1570,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                     <td className="p-3">
                       <span className="font-mono font-bold text-white">{p.usedCount}</span>
                       <span className="text-slate-400"> / {p.quota} kupon</span>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase inline-block ${
+                          p.targetSegment === "loyal"
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            : p.targetSegment === "new"
+                            ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                            : p.targetSegment === "repeat"
+                            ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                            : p.targetSegment === "inactive"
+                            ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                            : p.targetSegment === "specific_email"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                            : "bg-slate-700 text-slate-300"
+                        }`}
+                      >
+                        {p.targetSegment === "loyal"
+                          ? "VIP Loyal"
+                          : p.targetSegment === "new"
+                          ? "New User"
+                          : p.targetSegment === "repeat"
+                          ? "Repeat"
+                          : p.targetSegment === "inactive"
+                          ? "Reaktivasi"
+                          : p.targetSegment === "specific_email"
+                          ? `Khusus Email`
+                          : "Semua User"}
+                      </span>
+                      {p.targetCustomerEmail && (
+                        <span className="text-[10px] text-slate-400 block truncate max-w-[120px] font-mono mt-0.5">
+                          {p.targetCustomerEmail}
+                        </span>
+                      )}
                     </td>
                     <td className="p-3">
                       <span
@@ -1702,49 +1812,79 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                       </td>
 
                       <td className="p-3">
-                        {cust.segment === "Inactive Customer" && (
-                          <button
-                            onClick={() => handleSendRetentionAction(cust, "KANGEN15", "winback_offer")}
-                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
-                            title="Kirim voucher 15% untuk mengajak belanja kembali"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>Voucher Kangen 15%</span>
-                          </button>
-                        )}
+                        <div className="flex flex-col gap-1.5 items-start">
+                          {cust.segment === "Inactive Customer" && (
+                            <button
+                              onClick={() => handleSendRetentionAction(cust, "KANGEN15", "winback_offer")}
+                              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                              title="Kirim voucher 15% untuk mengajak belanja kembali"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>Voucher Kangen 15%</span>
+                            </button>
+                          )}
 
-                        {cust.segment === "Loyal Customer" && (
-                          <button
-                            onClick={() => handleSendRetentionAction(cust, "VIPREWARD", "loyalty_voucher")}
-                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
-                            title="Kirim voucher apresiasi loyalitas VIP"
-                          >
-                            <Award className="w-3 h-3" />
-                            <span>Apresiasi VIP (20%)</span>
-                          </button>
-                        )}
+                          {cust.segment === "Loyal Customer" && (
+                            <button
+                              onClick={() => handleSendRetentionAction(cust, "VIPREWARD", "loyalty_voucher")}
+                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                              title="Kirim voucher apresiasi loyalitas VIP"
+                            >
+                              <Award className="w-3 h-3" />
+                              <span>Apresiasi VIP (20%)</span>
+                            </button>
+                          )}
 
-                        {cust.segment === "Repeat Customer" && (
-                          <button
-                            onClick={() => handleSendRetentionAction(cust, "DESSERT10K", "reorder_nudge")}
-                            className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
-                            title="Kirim voucher potongan Rp 10.000"
-                          >
-                            <Sparkles className="w-3 h-3" />
-                            <span>Kupon Treat 10k</span>
-                          </button>
-                        )}
+                          {cust.segment === "Repeat Customer" && (
+                            <button
+                              onClick={() => handleSendRetentionAction(cust, "DESSERT10K", "reorder_nudge")}
+                              className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                              title="Kirim voucher potongan Rp 10.000"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              <span>Kupon Treat 10k</span>
+                            </button>
+                          )}
 
-                        {cust.segment === "New Customer" && (
+                          {cust.segment === "New Customer" && (
+                            <button
+                              onClick={() => handleSendRetentionAction(cust, "MANIS20", "welcome_nudge")}
+                              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
+                              title="Kirim voucher selamat datang 20%"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              <span>Voucher Baru 20%</span>
+                            </button>
+                          )}
+
+                          {/* Buat Promo Khusus Pelanggan Ini */}
                           <button
-                            onClick={() => handleSendRetentionAction(cust, "MANIS20", "welcome_nudge")}
-                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-sm"
-                            title="Kirim voucher selamat datang 20%"
+                            onClick={() => {
+                              const cleanName = (cust.name || "CUST").split(" ")[0].replace(/[^A-Za-z]/g, "").toUpperCase();
+                              const codeSuggestion = `${cleanName}${cust.segment === "Loyal Customer" ? "VIP" : "SPECIAL"}${Math.floor(10 + Math.random() * 90)}`;
+                              setNewPromo({
+                                code: codeSuggestion,
+                                title: `Spesial Reward untuk ${cust.name}`,
+                                description: `Voucher promo eksklusif untuk ${cust.email}`,
+                                discountType: "percentage",
+                                discountValue: cust.segment === "Loyal Customer" ? 25 : 20,
+                                minPurchase: 50000,
+                                maxDiscount: 35000,
+                                quota: 1,
+                                maxUsagePerUser: 1,
+                                targetSegment: "specific_email",
+                                targetCustomerEmail: cust.email,
+                              });
+                              setActiveTab("promos");
+                              setIsAddPromoOpen(true);
+                            }}
+                            className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white rounded border border-slate-700 text-[10px] font-semibold transition flex items-center gap-1"
+                            title="Buat promo kupon khusus untuk email pelanggan ini"
                           >
-                            <Sparkles className="w-3 h-3" />
-                            <span>Voucher Baru 20%</span>
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>Buat Promo Khusus</span>
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))

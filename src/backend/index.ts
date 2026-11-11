@@ -135,6 +135,12 @@ async function ensureDatabaseSchema(d1: D1Database) {
     if (!existingPromoCols.has("max_usage_per_user")) {
       await d1.prepare("ALTER TABLE promotions ADD COLUMN max_usage_per_user INTEGER NOT NULL DEFAULT 1;").run();
     }
+    if (!existingPromoCols.has("target_segment")) {
+      await d1.prepare("ALTER TABLE promotions ADD COLUMN target_segment TEXT DEFAULT 'all';").run();
+    }
+    if (!existingPromoCols.has("target_customer_email")) {
+      await d1.prepare("ALTER TABLE promotions ADD COLUMN target_customer_email TEXT;").run();
+    }
 
     // 4. stock_logs table
     await d1.prepare(`
@@ -836,6 +842,69 @@ app.get("/api/promotions", async (c) => {
   return c.json(memoryPromotions);
 });
 
+// Helper: Evaluate dynamic customer segment for targeted promotions
+async function evaluateCustomerSegment(
+  c: any,
+  customerEmail?: string
+): Promise<"new" | "repeat" | "loyal" | "inactive"> {
+  if (!customerEmail) return "new";
+  const cleanEmail = customerEmail.toLowerCase().trim();
+
+  let validOrders: any[] = [];
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      const oDb = await db
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.customerEmail, cleanEmail))
+        .all();
+      validOrders = oDb.filter(
+        (o) =>
+          o.status === "paid" ||
+          o.status === "kitchen_processing" ||
+          o.status === "out_for_delivery" ||
+          o.status === "completed"
+      );
+    } catch (_) {}
+  }
+
+  if (validOrders.length === 0) {
+    validOrders = memoryOrders.filter(
+      (o) =>
+        o.customerEmail &&
+        o.customerEmail.toLowerCase().trim() === cleanEmail &&
+        (o.status === "paid" ||
+          o.status === "kitchen_processing" ||
+          o.status === "out_for_delivery" ||
+          o.status === "completed")
+    );
+  }
+
+  const totalOrders = validOrders.length;
+  const totalSpent = validOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  const orderDates = validOrders.map((o) => o.createdAt || 0);
+  const lastOrderDate = orderDates.length > 0 ? Math.max(...orderDates) : null;
+  const now = Date.now();
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+
+  if (totalOrders >= 5 || totalSpent >= 500000) {
+    return "loyal";
+  } else if (totalOrders >= 2) {
+    if (lastOrderDate && now - lastOrderDate > thirtyDaysMs) {
+      return "inactive";
+    }
+    return "repeat";
+  } else if (totalOrders === 1) {
+    if (lastOrderDate && now - lastOrderDate > 45 * 24 * 60 * 60 * 1000) {
+      return "inactive";
+    }
+    return "new";
+  }
+
+  return "new";
+}
+
 // 5. Validate Coupon Code
 app.post("/api/promotions/validate", async (c) => {
   const { code, subtotal, customerEmail } = await c.req.json<{
@@ -892,6 +961,70 @@ app.post("/api/promotions/validate", async (c) => {
   // Global Quota Check
   if (promo.quota > 0 && promo.usedCount >= promo.quota) {
     return c.json({ valid: false, message: "Kuota penggunaan promo ini telah habis" }, 400);
+  }
+
+  // Target Segment & Specific Customer Email Check
+  const targetSegment = promo.targetSegment || "all";
+  if (targetSegment !== "all") {
+    if (!customerEmail) {
+      return c.json(
+        {
+          valid: false,
+          message: `Promo ini khusus untuk segmen pelanggan tertentu (${targetSegment.toUpperCase()}). Silakan isi email pemesan atau login terlebih dahulu.`,
+        },
+        400
+      );
+    }
+
+    const cleanEmail = customerEmail.toLowerCase().trim();
+
+    if (targetSegment === "specific_email") {
+      const allowedEmail = (promo.targetCustomerEmail || "").toLowerCase().trim();
+      if (!allowedEmail || cleanEmail !== allowedEmail) {
+        return c.json(
+          {
+            valid: false,
+            message: `Kupon promo ini khusus diperuntukkan bagi customer dengan email: ${promo.targetCustomerEmail || "tertentu"}.`,
+          },
+          400
+        );
+      }
+    } else {
+      const currentSegment = await evaluateCustomerSegment(c, cleanEmail);
+      if (targetSegment === "new" && currentSegment !== "new") {
+        return c.json(
+          {
+            valid: false,
+            message: "Promo ini khusus untuk 'New Customer' (pelanggan baru pada pesanan pertama).",
+          },
+          400
+        );
+      } else if (targetSegment === "loyal" && currentSegment !== "loyal") {
+        return c.json(
+          {
+            valid: false,
+            message: "Promo ini merupakan apresiasi khusus bagi 'Loyal Customer' (min. 5x transaksi atau belanja Rp 500rb).",
+          },
+          400
+        );
+      } else if (targetSegment === "repeat" && currentSegment !== "repeat" && currentSegment !== "loyal") {
+        return c.json(
+          {
+            valid: false,
+            message: "Promo ini khusus untuk 'Repeat Customer' yang telah pernah berbelanja di SweetLayers.",
+          },
+          400
+        );
+      } else if (targetSegment === "inactive" && currentSegment !== "inactive") {
+        return c.json(
+          {
+            valid: false,
+            message: "Promo ini adalah voucher 'Kami Rindu Kamu' khusus pelanggan yang lama tidak bertransaksi.",
+          },
+          400
+        );
+      }
+    }
   }
 
   // Per-Customer Usage Limit Check
@@ -964,6 +1097,8 @@ app.post("/api/promotions/validate", async (c) => {
       code: promo.code,
       title: promo.title,
       discountAmount: discount,
+      targetSegment: promo.targetSegment || "all",
+      targetCustomerEmail: promo.targetCustomerEmail || null,
     },
   });
 });
@@ -1081,13 +1216,32 @@ app.post("/api/orders/checkout", async (c) => {
     const hasQuota = !promo?.quota || promo.usedCount < promo.quota;
 
     if (promo && isValidDate && hasQuota && subtotal >= promo.minPurchase) {
-      if (promo.discountType === "percentage") {
-        discountAmount = Math.round((subtotal * promo.discountValue) / 100);
-        if (promo.maxDiscount && discountAmount > promo.maxDiscount) {
-          discountAmount = promo.maxDiscount;
+      let isEligible = true;
+      const targetSegment = promo.targetSegment || "all";
+      if (targetSegment !== "all") {
+        const cleanEmail = (body.customerEmail || "").toLowerCase().trim();
+        if (!cleanEmail) {
+          isEligible = false;
+        } else if (targetSegment === "specific_email") {
+          isEligible = cleanEmail === (promo.targetCustomerEmail || "").toLowerCase().trim();
+        } else {
+          const currentSegment = await evaluateCustomerSegment(c, cleanEmail);
+          if (targetSegment === "new") isEligible = currentSegment === "new";
+          else if (targetSegment === "loyal") isEligible = currentSegment === "loyal";
+          else if (targetSegment === "repeat") isEligible = currentSegment === "repeat" || currentSegment === "loyal";
+          else if (targetSegment === "inactive") isEligible = currentSegment === "inactive";
         }
-      } else {
-        discountAmount = promo.discountValue;
+      }
+
+      if (isEligible) {
+        if (promo.discountType === "percentage") {
+          discountAmount = Math.round((subtotal * promo.discountValue) / 100);
+          if (promo.maxDiscount && discountAmount > promo.maxDiscount) {
+            discountAmount = promo.maxDiscount;
+          }
+        } else {
+          discountAmount = promo.discountValue;
+        }
       }
     }
   }
@@ -2231,6 +2385,8 @@ app.post("/api/admin/promotions", async (c) => {
     validUntil?: number;
     isBanner?: number;
     bannerImageUrl?: string;
+    targetSegment?: "all" | "new" | "repeat" | "loyal" | "inactive" | "specific_email";
+    targetCustomerEmail?: string;
   }>();
 
   if (!body.code || !body.title || !body.discountValue) {
@@ -2257,6 +2413,8 @@ app.post("/api/admin/promotions", async (c) => {
     bannerImageUrl: body.bannerImageUrl || null,
     isBanner: body.isBanner ? 1 : 0,
     isActive: 1,
+    targetSegment: body.targetSegment || "all",
+    targetCustomerEmail: body.targetCustomerEmail ? body.targetCustomerEmail.toLowerCase().trim() : null,
   };
 
   memoryPromotions.unshift(newPromo);

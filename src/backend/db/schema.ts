@@ -59,6 +59,8 @@ export const promotions = sqliteTable("promotions", {
   bannerImageUrl: text("banner_image_url"),
   isBanner: integer("is_banner").notNull().default(0),
   isActive: integer("is_active").notNull().default(1),
+  targetSegment: text("target_segment").default("all"), // 'all' | 'new' | 'repeat' | 'loyal' | 'inactive' | 'specific_email'
+  targetCustomerEmail: text("target_customer_email"),
 });
 
 export const orders = sqliteTable("orders", {

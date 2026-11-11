@@ -51,6 +51,8 @@ export interface Promotion {
   validFrom?: number | null;
   validUntil?: number | null;
   isActive: number;
+  targetSegment?: "all" | "new" | "repeat" | "loyal" | "inactive" | "specific_email";
+  targetCustomerEmail?: string | null;
 }
 
 export interface CartItem {

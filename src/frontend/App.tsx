@@ -59,6 +59,22 @@ export function DessertBoxApp() {
 
   useEffect(() => {
     fetchData();
+
+    // Auto-update storefront: poll every 8 seconds so admin stock changes appear live on customer screen
+    const interval = setInterval(() => {
+      fetchData();
+    }, 8000);
+
+    // Also immediately refetch when user refocuses the browser window
+    const handleFocus = () => {
+      fetchData();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const filteredProducts = products.filter((p) => {

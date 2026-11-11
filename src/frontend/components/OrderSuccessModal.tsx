@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { CheckCircle, Calendar, Clock, MapPin, MessageCircle, HeartHandshake, X } from "lucide-react";
 import { Order } from "../types";
+import { useCart } from "../context/CartContext";
 
 interface OrderSuccessModalProps {
   order: Order | null;
@@ -8,7 +9,24 @@ interface OrderSuccessModalProps {
 }
 
 export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onClose }) => {
+  const { clearCart } = useCart();
+
+  useEffect(() => {
+    if (order) {
+      clearCart();
+      try {
+        localStorage.removeItem("sweetlayers_cart");
+        localStorage.removeItem("sweetlayers_promo");
+      } catch (_) {}
+    }
+  }, [order]);
+
   if (!order) return null;
+
+  const handleClose = () => {
+    clearCart();
+    onClose();
+  };
 
   const whatsappMessage = encodeURIComponent(
     `Halo SweetLayers! Saya ingin konfirmasi pesanan dengan nomor order: ${order.orderNumber} atas nama ${order.customerName}. Terima kasih!`
@@ -20,7 +38,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
         {/* Top Header */}
         <div className="p-6 bg-gradient-to-br from-emerald-600 to-teal-700 text-white text-center relative">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="absolute top-4 right-4 p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
           >
             <X className="w-5 h-5" />
@@ -130,7 +148,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
           </a>
 
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="flex-1 py-3 px-4 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition-all"
           >
             Selesai / Pesan Lagi
