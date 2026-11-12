@@ -525,9 +525,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
     if (!confirmDelete) return;
 
     try {
-      const res = await authFetch(`/api/admin/promotions/${promo.id}`, {
+      let res = await authFetch(`/api/admin/promotions/${promo.id}`, {
         method: "DELETE",
       });
+
+      if (!res.ok) {
+        // Fallback to POST endpoint if DELETE method is not allowed by CDN
+        res = await authFetch(`/api/admin/promotions/${promo.id}/delete`, {
+          method: "POST",
+        });
+      }
 
       if (res.ok) {
         setStockSuccessMsg(`Voucher promo [${promo.code}] berhasil dihapus!`);

@@ -2496,6 +2496,31 @@ app.delete("/api/admin/promotions/:id", async (c) => {
   return c.json({ success: true, message: `Promo [${deletedCode}] berhasil dihapus!` });
 });
 
+app.post("/api/admin/promotions/:id/delete", async (c) => {
+  const promoId = c.req.param("id");
+
+  const idx = memoryPromotions.findIndex((p) => p.id === promoId);
+  let deletedCode = promoId;
+  if (idx > -1) {
+    deletedCode = memoryPromotions[idx].code;
+    memoryPromotions.splice(idx, 1);
+  }
+
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      await db.delete(schema.promotions).where(eq(schema.promotions.id, promoId));
+      try {
+        await c.env.DB.prepare("DELETE FROM promotion_usages WHERE promotion_id = ?").bind(promoId).run();
+      } catch (_) {}
+    } catch (e: any) {
+      console.warn("D1 delete promo error:", e);
+    }
+  }
+
+  return c.json({ success: true, message: `Promo [${deletedCode}] berhasil dihapus!` });
+});
+
 app.patch("/api/admin/promotions/:id/toggle", async (c) => {
   const promoId = c.req.param("id");
   let newStatus = 1;
