@@ -835,12 +835,21 @@ app.get("/api/promotions", async (c) => {
         .from(schema.promotions)
         .where(eq(schema.promotions.isActive, 1))
         .all();
-      if (promos && promos.length > 0) return c.json(promos);
+      if (promos && promos.length > 0) {
+        // Hanya tampilkan promo yang aktif dan kuota belum habis
+        const availablePromos = promos.filter(
+          (p) => !p.quota || p.quota === 0 || p.usedCount < p.quota
+        );
+        return c.json(availablePromos);
+      }
     } catch (e) {
       console.warn("D1 promotions error, fallback:", e);
     }
   }
-  return c.json(memoryPromotions);
+  const availableMem = memoryPromotions.filter(
+    (p) => p.isActive === 1 && (!p.quota || p.quota === 0 || p.usedCount < p.quota)
+  );
+  return c.json(availableMem);
 });
 
 // Helper: Evaluate dynamic customer segment for targeted promotions
@@ -1590,7 +1599,13 @@ async function markOrderPaidAndDeductStock(
   if (promoCodeUsed) {
     const cleanP = promoCodeUsed.toUpperCase().trim();
     const pMem = memoryPromotions.find((p) => p.code === cleanP);
-    if (pMem) pMem.usedCount = (pMem.usedCount || 0) + 1;
+    if (pMem) {
+      pMem.usedCount = (pMem.usedCount || 0) + 1;
+      // Otomatis nonaktifkan jika kuota kupon sudah terpakai semua
+      if (pMem.quota > 0 && pMem.usedCount >= pMem.quota) {
+        pMem.isActive = 0;
+      }
+    }
 
     const promoUsageRecord = {
       id: `puse_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -1611,9 +1626,15 @@ async function markOrderPaidAndDeductStock(
           .where(eq(schema.promotions.code, cleanP))
           .get();
         if (pDb) {
+          const nextUsedCount = (pDb.usedCount || 0) + 1;
+          // Otomatis nonaktifkan di D1 database jika kuota kupon sudah terpakai semua
+          const shouldDeactivate = pDb.quota > 0 && nextUsedCount >= pDb.quota ? 0 : pDb.isActive;
           await db
             .update(schema.promotions)
-            .set({ usedCount: (pDb.usedCount || 0) + 1 })
+            .set({ 
+              usedCount: nextUsedCount,
+              isActive: shouldDeactivate
+            })
             .where(eq(schema.promotions.id, pDb.id));
           promoUsageRecord.promotionId = pDb.id;
         }
@@ -2169,13 +2190,23 @@ app.post("/api/admin/orders/:id/cancel", async (c) => {
     if (targetOrder.promoCode) {
       const cleanP = targetOrder.promoCode.toUpperCase().trim();
       const pMem = memoryPromotions.find((p) => p.code === cleanP);
-      if (pMem && pMem.usedCount > 0) pMem.usedCount -= 1;
+      if (pMem && pMem.usedCount > 0) {
+        pMem.usedCount -= 1;
+        if (pMem.quota > 0 && pMem.usedCount < pMem.quota) {
+          pMem.isActive = 1; // Otomatis aktifkan kembali jika kuota kembali tersedia
+        }
+      }
 
       if (db) {
         try {
           const pDb = await db.select().from(schema.promotions).where(eq(schema.promotions.code, cleanP)).get();
           if (pDb && pDb.usedCount > 0) {
-            await db.update(schema.promotions).set({ usedCount: pDb.usedCount - 1 }).where(eq(schema.promotions.id, pDb.id));
+            const newCount = pDb.usedCount - 1;
+            const reactivate = pDb.quota > 0 && newCount < pDb.quota ? 1 : pDb.isActive;
+            await db
+              .update(schema.promotions)
+              .set({ usedCount: newCount, isActive: reactivate })
+              .where(eq(schema.promotions.id, pDb.id));
           }
         } catch (_) {}
       }

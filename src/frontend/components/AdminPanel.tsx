@@ -1886,8 +1886,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                       Rp {p.minPurchase.toLocaleString("id-ID")}
                     </td>
                     <td className="p-3">
-                      <span className="font-mono font-bold text-white">{p.usedCount}</span>
-                      <span className="text-slate-400"> / {p.quota} kupon</span>
+                      <div className="flex items-center gap-1.5 font-mono">
+                        <span className={`font-bold ${p.quota > 0 && p.usedCount >= p.quota ? "text-rose-400" : "text-white"}`}>
+                          {p.usedCount}
+                        </span>
+                        <span className="text-slate-400">/ {p.quota || "∞"}</span>
+                      </div>
+                      {p.quota > 0 && p.usedCount >= p.quota && (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30 mt-1">
+                          Habis
+                        </span>
+                      )}
                     </td>
                     <td className="p-3">
                       <span
@@ -1924,15 +1933,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onRefreshData }
                       )}
                     </td>
                     <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          p.isActive === 1
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                            : "bg-slate-700 text-slate-400"
-                        }`}
-                      >
-                        {p.isActive === 1 ? "AKTIF" : "NON-AKTIF"}
-                      </span>
+                      {p.quota > 0 && p.usedCount >= p.quota ? (
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            KUOTA HABIS
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium">Otomatis Nonaktif</span>
+                        </div>
+                      ) : (
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            p.isActive === 1
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-slate-700 text-slate-400"
+                          }`}
+                        >
+                          {p.isActive === 1 ? "AKTIF" : "NON-AKTIF"}
+                        </span>
+                      )}
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-1.5">
