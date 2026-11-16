@@ -35,6 +35,7 @@ export function DessertBoxApp() {
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
+  const [trackingOrderNumber, setTrackingOrderNumber] = useState<string | null>(null);
   const [isBusinessPlanOpen, setIsBusinessPlanOpen] = useState(false);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -93,7 +94,10 @@ export function DessertBoxApp() {
       <Navbar
         isAdminOpen={isAdminOpen}
         setIsAdminOpen={setIsAdminOpen}
-        onOpenOrders={() => setIsOrdersOpen(true)}
+        onOpenOrders={() => {
+          setTrackingOrderNumber(null);
+          setIsOrdersOpen(true);
+        }}
         onOpenBusinessPlan={() => setIsBusinessPlanOpen(true)}
       />
 
@@ -411,11 +415,20 @@ export function DessertBoxApp() {
       <OrderSuccessModal
         order={successOrder}
         onClose={() => setSuccessOrder(null)}
+        onTrackOrder={(orderNum) => {
+          setSuccessOrder(null);
+          setTrackingOrderNumber(orderNum);
+          setIsOrdersOpen(true);
+        }}
       />
 
       <CustomerOrdersModal
         isOpen={isOrdersOpen}
-        onClose={() => setIsOrdersOpen(false)}
+        onClose={() => {
+          setIsOrdersOpen(false);
+          setTrackingOrderNumber(null);
+        }}
+        initialOrderNumber={trackingOrderNumber}
       />
 
       <BusinessPlanModal

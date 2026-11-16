@@ -10,6 +10,7 @@ import {
   PackageCheck,
   ChevronDown,
   Briefcase,
+  Truck,
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -84,6 +85,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Heart className="w-4 h-4 text-rose-400" />
               <span>Keunggulan Kami</span>
             </a>
+            <button
+              type="button"
+              onClick={onOpenOrders}
+              className="hover:text-amber-600 transition-colors flex items-center gap-1.5 font-medium text-slate-700"
+            >
+              <Truck className="w-4 h-4 text-amber-500" />
+              <span>Lacak Pesanan</span>
+            </button>
             {onOpenBusinessPlan && (
               <button
                 type="button"
@@ -98,6 +107,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5">
+            {/* Track Order Button */}
+            <button
+              type="button"
+              onClick={onOpenOrders}
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition shadow-2xs"
+              title="Lacak Progres & Status Pesanan Anda"
+            >
+              <Truck className="w-4 h-4 text-amber-600" />
+              <span className="hidden sm:inline">Lacak Pesanan</span>
+            </button>
             {/* User Account / Login Button */}
             {isAuthenticated && user ? (
               <div className="relative" ref={userMenuRef}>

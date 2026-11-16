@@ -1,14 +1,15 @@
 import React, { useEffect } from "react";
-import { CheckCircle, Calendar, Clock, MapPin, MessageCircle, HeartHandshake, X } from "lucide-react";
+import { CheckCircle, Calendar, Clock, MapPin, MessageCircle, HeartHandshake, X, Truck } from "lucide-react";
 import { Order } from "../types";
 import { useCart } from "../context/CartContext";
 
 interface OrderSuccessModalProps {
   order: Order | null;
   onClose: () => void;
+  onTrackOrder?: (orderNumber: string) => void;
 }
 
-export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onClose }) => {
+export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onClose, onTrackOrder }) => {
   const { clearCart } = useCart();
 
   useEffect(() => {
@@ -144,23 +145,38 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order, onC
         </div>
 
         {/* Footer Actions */}
-        <div className="p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5">
-          <a
-            href={`https://wa.me/6281234567890?text=${whatsappMessage}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>Chat WhatsApp Toko</span>
-          </a>
+        <div className="p-5 bg-slate-50 border-t border-slate-100 flex flex-col gap-2.5">
+          {onTrackOrder && (
+            <button
+              onClick={() => {
+                handleClose();
+                onTrackOrder(order.orderNumber);
+              }}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-rose-500 to-pink-600 hover:from-amber-600 hover:to-pink-700 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 transform active:scale-[0.99]"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Lacak Status & Progres Pesanan Ini</span>
+            </button>
+          )}
 
-          <button
-            onClick={handleClose}
-            className="flex-1 py-3 px-4 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition-all"
-          >
-            Selesai / Pesan Lagi
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <a
+              href={`https://wa.me/6281234567890?text=${whatsappMessage}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Chat WhatsApp Toko</span>
+            </a>
+
+            <button
+              onClick={handleClose}
+              className="flex-1 py-3 px-4 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition-all"
+            >
+              Selesai / Belanja Lagi
+            </button>
+          </div>
         </div>
       </div>
     </div>

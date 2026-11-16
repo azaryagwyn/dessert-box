@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, or, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import {
   DEFAULT_CATEGORIES,
@@ -1437,10 +1437,13 @@ app.post("/api/orders/checkout", async (c) => {
   });
 });
 
-// 7. Get Order by Order Number
+// 7. Get Order by Order Number (Case-insensitive & Trimmed)
 app.get("/api/orders/:orderNumber", async (c) => {
-  const orderNumber = c.req.param("orderNumber");
-  let order = memoryOrders.find((o) => o.orderNumber === orderNumber);
+  const rawOrderNumber = c.req.param("orderNumber");
+  const cleanOrderNumber = (rawOrderNumber || "").trim().toUpperCase();
+  let order = memoryOrders.find(
+    (o) => o.orderNumber && o.orderNumber.toUpperCase() === cleanOrderNumber
+  );
 
   if (c.env?.DB) {
     try {
@@ -1448,7 +1451,12 @@ app.get("/api/orders/:orderNumber", async (c) => {
       const oDb = await db
         .select()
         .from(schema.orders)
-        .where(eq(schema.orders.orderNumber, orderNumber))
+        .where(
+          or(
+            eq(schema.orders.orderNumber, cleanOrderNumber),
+            eq(schema.orders.orderNumber, rawOrderNumber)
+          )
+        )
         .get();
       if (oDb) {
         const items = await db
@@ -1458,7 +1466,9 @@ app.get("/api/orders/:orderNumber", async (c) => {
           .all();
         order = { ...oDb, items };
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("D1 get order by number error:", e);
+    }
   }
 
   if (!order) {
@@ -1466,6 +1476,74 @@ app.get("/api/orders/:orderNumber", async (c) => {
   }
 
   return c.json(order);
+});
+
+// 7b. Public Order Tracking (Search by Order Number, Email, or Phone)
+app.get("/api/orders/track", async (c) => {
+  const query = (c.req.query("q") || "").trim();
+  if (!query) {
+    return c.json({ error: "Silakan masukkan nomor pesanan atau email Anda" }, 400);
+  }
+
+  const cleanOrderNum = query.toUpperCase();
+  const cleanEmail = query.toLowerCase();
+
+  let orders: any[] = [];
+  if (c.env?.DB) {
+    try {
+      const db = drizzle(c.env.DB, { schema });
+      let oList: any[] = [];
+      if (cleanOrderNum.startsWith("DB-")) {
+        const single = await db
+          .select()
+          .from(schema.orders)
+          .where(
+            or(
+              eq(schema.orders.orderNumber, cleanOrderNum),
+              eq(schema.orders.orderNumber, query)
+            )
+          )
+          .get();
+        if (single) oList = [single];
+      } else {
+        oList = await db
+          .select()
+          .from(schema.orders)
+          .where(
+            or(
+              eq(schema.orders.customerEmail, cleanEmail),
+              eq(schema.orders.customerPhone, query),
+              eq(schema.orders.orderNumber, cleanOrderNum)
+            )
+          )
+          .orderBy(desc(schema.orders.createdAt))
+          .limit(15)
+          .all();
+      }
+
+      for (const o of oList) {
+        const items = await db
+          .select()
+          .from(schema.orderItems)
+          .where(eq(schema.orderItems.orderId, o.id))
+          .all();
+        orders.push({ ...o, items });
+      }
+    } catch (e) {
+      console.warn("D1 track error:", e);
+    }
+  }
+
+  if (orders.length === 0) {
+    orders = memoryOrders.filter(
+      (o) =>
+        (o.orderNumber && o.orderNumber.toUpperCase() === cleanOrderNum) ||
+        (o.customerEmail && o.customerEmail.toLowerCase() === cleanEmail) ||
+        (o.customerPhone && o.customerPhone === query)
+    );
+  }
+
+  return c.json(orders);
 });
 
 // Helper: Mark order as paid, atomically deduct stock, log to stock_logs, and update promo usage
