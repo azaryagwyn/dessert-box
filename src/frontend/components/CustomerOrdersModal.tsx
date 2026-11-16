@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Copy,
   Check,
-  ShieldCheck,
+  Heart,
+  Sparkles,
   ShoppingBag,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -70,10 +71,7 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [copiedOrderNumber, setCopiedOrderNumber] = useState<string | null>(null);
   const [refreshingOrder, setRefreshingOrder] = useState<string | null>(null);
-  const [proxyStatus, setProxyStatus] = useState<{ [orderNumber: string]: any }>({});
-  const [checkingProxy, setCheckingProxy] = useState<string | null>(null);
 
-  // Load orders when modal opens
   useEffect(() => {
     if (!isOpen) return;
 
@@ -86,7 +84,6 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
     if (user) {
       fetchUserOrders();
     } else {
-      // If guest, try reading recent orders from localStorage
       loadLocalGuestOrders();
     }
   }, [isOpen, user, initialOrderNumber]);
@@ -158,7 +155,7 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
   const handleTrackQuery = async (queryText?: string) => {
     const q = (queryText !== undefined ? queryText : searchQuery).trim();
     if (!q) {
-      setSearchError("Silakan ketik nomor pesanan (cth: DB-261112-4590) atau email.");
+      setSearchError("Silakan ketik nomor pesanan (cth: DB-261116-1884) atau email Anda.");
       return;
     }
 
@@ -166,7 +163,7 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
     setSearchError(null);
 
     try {
-      // First try single order lookup
+      // 1. Try public track endpoint
       const res = await fetch(`/api/orders/track?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
@@ -176,7 +173,7 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
         }
       }
 
-      // Fallback: try direct order number lookup
+      // 2. Try direct order number endpoint
       const singleRes = await fetch(`/api/orders/${encodeURIComponent(q.toUpperCase())}`);
       if (singleRes.ok) {
         const singleData = await singleRes.json();
@@ -186,7 +183,7 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
         }
       }
 
-      // Check localStorage fallback
+      // 3. Check localStorage
       const raw = localStorage.getItem("sweetlayers_all_orders");
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -204,9 +201,9 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
         }
       }
 
-      setSearchError(`Pesanan dengan kata kunci "${q}" tidak ditemukan. Pastikan nomor pesanan atau email sudah benar.`);
+      setSearchError(`Pesanan dengan kata kunci "${q}" tidak ditemukan. Pastikan nomor pesanan atau email sudah benar ya!`);
     } catch (err: any) {
-      setSearchError("Gagal menghubungi server pelacakan pesanan. Silakan coba lagi.");
+      setSearchError("Gagal menghubungi server pelacakan. Silakan coba sesaat lagi.");
     } finally {
       setIsSearching(false);
     }
@@ -234,51 +231,31 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
     setTimeout(() => setCopiedOrderNumber(null), 2000);
   };
 
-  const checkMidtransProxyStatus = async (orderNumber: string) => {
-    setCheckingProxy(orderNumber);
-    try {
-      const res = await fetch("/api/proxy/midtrans/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: orderNumber }),
-      });
-      const data = await res.json();
-      setProxyStatus((prev) => ({ ...prev, [orderNumber]: data }));
-    } catch (err: any) {
-      setProxyStatus((prev) => ({
-        ...prev,
-        [orderNumber]: { error: err.message || "Gagal cek status gateway" },
-      }));
-    } finally {
-      setCheckingProxy(null);
-    }
-  };
-
   if (!isOpen) return null;
 
   const TRACKING_STEPS = [
     {
       key: "paid",
-      title: "Pembayaran Terverifikasi",
-      desc: "Pesanan diterima sistem",
+      title: "Pesanan Diterima",
+      customerNote: "Pembayaran terverifikasi dan pesanan siap diproses",
       icon: CheckCircle2,
     },
     {
       key: "kitchen_processing",
-      title: "Dipersiapkan di Dapur",
-      desc: "Koki meracik dessert fresh",
+      title: "Dipersiapkan Dapur",
+      customerNote: "Koki kami sedang meracik dessert box pesananmu",
       icon: ChefHat,
     },
     {
       key: "out_for_delivery",
-      title: "Dalam Pengiriman",
-      desc: "Kurir mengantar pesanan",
+      title: "Dalam Perjalanan",
+      customerNote: "Kurir sedang meluncur mengantarkan pesanan ke rumahmu",
       icon: Truck,
     },
     {
       key: "completed",
-      title: "Pesanan Tiba",
-      desc: "Pesanan selesai & dinikmati",
+      title: "Telah Sampai",
+      customerNote: "Pesanan tiba dengan selamat! Selamat menikmati 🍰",
       icon: PackageCheck,
     },
   ];
@@ -304,43 +281,43 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
     switch (status) {
       case "paid":
         return (
-          <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-300 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
+          <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Lunas / Siap Dapur
+            Pesanan Diterima
           </span>
         );
       case "kitchen_processing":
         return (
-          <span className="px-3 py-1 bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
+          <span className="px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
             <ChefHat className="w-3.5 h-3.5 text-amber-600 animate-bounce" />
-            Dipersiapkan di Dapur
+            Sedang Dibuat di Dapur
           </span>
         );
       case "out_for_delivery":
         return (
-          <span className="px-3 py-1 bg-purple-50 text-purple-800 border border-purple-300 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
-            <Truck className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
-            Sedang Dikirim Kurir
+          <span className="px-3 py-1 bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
+            <Truck className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
+            Kurir Sedang Mengantar
           </span>
         );
       case "completed":
         return (
-          <span className="px-3 py-1 bg-blue-50 text-blue-800 border border-blue-300 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
-            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+          <span className="px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-2xs">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
             Pesanan Selesai
           </span>
         );
       case "cancelled":
         return (
-          <span className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-300 text-xs font-bold rounded-full flex items-center gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
-            Dibatalkan
+          <span className="px-3 py-1 bg-gray-100 text-gray-700 border border-gray-300 text-xs font-bold rounded-full flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 text-gray-500" />
+            Pesanan Dibatalkan
           </span>
         );
       default:
         return (
           <span className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold rounded-full flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+            <Clock className="w-3.5 h-3.5 text-amber-500 animate-spin" style={{ animationDuration: "3s" }} />
             Menunggu Pembayaran
           </span>
         );
@@ -348,56 +325,66 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
-      <div className="relative bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-amber-100">
-        {/* Header */}
-        <div className="p-5 sm:p-6 border-b border-amber-100/80 bg-gradient-to-r from-amber-500 via-rose-500 to-pink-600 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center text-2xl shadow-inner">
-              <Truck className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="font-['Playfair_Display',serif] font-black text-xl sm:text-2xl text-white tracking-tight">
-                Lacak Status Pesanan
-              </h2>
-              <p className="text-xs text-amber-100 mt-0.5 font-medium">
-                Pantau proses dapur dan pengiriman dessert box Anda secara real-time
-              </p>
-            </div>
-          </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-amber-950/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
+      <div className="relative bg-[#FFFDF9] w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-amber-100/90">
+        
+        {/* Customer Header - Warm & Sweet Bakery Aesthetic */}
+        <div className="p-6 sm:p-7 border-b border-amber-100 bg-gradient-to-br from-amber-50 via-rose-50/60 to-orange-50/40 relative">
           <button
             onClick={onClose}
-            className="text-white/80 hover:text-white p-2 rounded-full hover:bg-white/20 transition-all"
+            className="absolute top-5 right-5 p-2 rounded-full bg-white/80 hover:bg-white text-slate-400 hover:text-slate-700 border border-amber-100 shadow-2xs transition-all"
             aria-label="Tutup"
           >
             <X className="w-5 h-5" />
           </button>
+
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-400 text-white flex items-center justify-center text-2xl shadow-md">
+              🍰
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full">
+                  Live Order Tracker
+                </span>
+                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-500" /> SweetLayers
+                </span>
+              </div>
+              <h2 className="font-['Playfair_Display',serif] font-bold text-2xl text-slate-900 tracking-tight mt-1">
+                Lacak Pesanan Manismu
+              </h2>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Lihat tahapan koki kami meracik dessert box hingga diantar kurir ke depan pintumu
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Search Bar & Filter Section */}
-        <div className="p-4 sm:p-5 bg-gradient-to-b from-amber-50/60 to-white border-b border-gray-100">
+        {/* Search Bar for Customer */}
+        <div className="p-4 sm:p-5 bg-white border-b border-amber-100/60">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleTrackQuery();
             }}
-            className="flex flex-col sm:flex-row gap-2.5"
+            className="flex flex-col sm:flex-row gap-2"
           >
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-amber-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Masukkan Nomor Pesanan (cth: DB-261112-4590) atau Email Anda..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition shadow-2xs"
+                placeholder="Ketik Nomor Pesanan (cth: DB-261116-1884) atau Email..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-amber-200/80 bg-amber-50/30 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition"
               />
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="submit"
                 disabled={isSearching}
-                className="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-bold text-xs rounded-2xl shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-r from-amber-600 to-rose-500 hover:from-amber-700 hover:to-rose-600 text-white font-bold text-xs rounded-2xl shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {isSearching ? (
                   <>
@@ -407,19 +394,20 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                 ) : (
                   <>
                     <Search className="w-3.5 h-3.5" />
-                    <span>Lacak Pesanan</span>
+                    <span>Lacak Sekarang</span>
                   </>
                 )}
               </button>
+
               {user && (
                 <button
                   type="button"
                   onClick={fetchUserOrders}
                   disabled={isLoading}
-                  className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-2xl transition flex items-center gap-1"
+                  className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-semibold text-xs rounded-2xl transition flex items-center gap-1"
                   title="Lihat semua pesanan akun saya"
                 >
-                  <ShoppingBag className="w-3.5 h-3.5 text-slate-600" />
+                  <ShoppingBag className="w-3.5 h-3.5 text-amber-700" />
                   <span className="hidden sm:inline">Pesanan Saya</span>
                 </button>
               )}
@@ -427,30 +415,30 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
           </form>
 
           {searchError && (
-            <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 animate-in fade-in duration-150">
+            <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
               <span>{searchError}</span>
             </div>
           )}
         </div>
 
-        {/* Content Body: List of Tracked Orders */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        {/* Orders Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#FAF7F2]/40">
           {isLoading ? (
             <div className="py-16 text-center text-slate-500 text-xs flex flex-col items-center gap-3">
-              <div className="w-9 h-9 border-3 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
-              <span className="font-medium text-slate-600">Memeriksa status pesanan terkini...</span>
+              <div className="w-10 h-10 border-3 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+              <span className="font-medium text-slate-600">Sedang memeriksa status pesanan dessert Anda...</span>
             </div>
           ) : orders.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-16 h-16 rounded-3xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center text-3xl mx-auto mb-3 shadow-inner">
-                🔍
+            <div className="py-14 text-center px-4">
+              <div className="w-16 h-16 rounded-3xl bg-amber-100/70 border border-amber-200 text-amber-700 flex items-center justify-center text-3xl mx-auto mb-3 shadow-inner">
+                📦
               </div>
               <h3 className="font-['Playfair_Display',serif] font-bold text-slate-800 text-lg">
-                Belum Ada Pesanan yang Dilacak
+                Temukan Pesanan Dessert Anda
               </h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-                Ketik nomor pesanan invoice Anda pada kolom pencarian di atas untuk melihat progres pembuatan dan pengiriman dessert box Anda.
+              <p className="text-xs text-slate-500 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                Silakan masukkan nomor pesanan Anda yang tertera pada faktur atau email pemesanan untuk melihat perjalanan dessert Anda.
               </p>
             </div>
           ) : (
@@ -460,25 +448,26 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
               const isPending = ord.status === "pending";
 
               const whatsappMessage = encodeURIComponent(
-                `Halo SweetLayers! Saya ingin menanyakan status pesanan #${ord.orderNumber} atas nama ${ord.customerName}. Terima kasih!`
+                `Halo Kak SweetLayers! Saya ingin menanyakan status pesanan saya #${ord.orderNumber} atas nama ${ord.customerName}. Terima kasih!`
               );
 
               return (
                 <div
                   key={ord.id || ord.orderNumber}
-                  className="border border-slate-200 rounded-3xl p-5 hover:border-amber-300 transition-all bg-white shadow-sm space-y-4"
+                  className="bg-white border border-amber-100 rounded-3xl p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow"
                 >
-                  {/* Top Bar: Order Number, Date, Status */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
+                  {/* Top Bar: Order ID, Time, and Live Status Badge */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100/80 pb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-mono font-black text-slate-900 tracking-wide">
+                        <span className="text-xs font-mono font-bold text-slate-400">NO. PESANAN:</span>
+                        <span className="text-sm font-mono font-black text-amber-950">
                           #{ord.orderNumber}
                         </span>
                         <button
                           type="button"
                           onClick={() => handleCopyOrderNumber(ord.orderNumber)}
-                          className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                          className="p-1 rounded-lg text-slate-400 hover:text-amber-700 hover:bg-amber-50 transition"
                           title="Salin Nomor Pesanan"
                         >
                           {copiedOrderNumber === ord.orderNumber ? (
@@ -488,11 +477,11 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                           )}
                         </button>
                       </div>
-                      <span className="text-[11px] text-slate-400 block mt-0.5 font-medium">
-                        Waktu Pemesanan:{" "}
+                      <span className="text-[11px] text-slate-500 block mt-0.5">
+                        Dipesan pada:{" "}
                         {new Date(ord.createdAt).toLocaleString("id-ID", {
                           day: "numeric",
-                          month: "short",
+                          month: "long",
                           year: "numeric",
                           hour: "2-digit",
                           minute: "2-digit",
@@ -505,12 +494,12 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                         type="button"
                         onClick={() => handleRefreshSingleOrder(ord.orderNumber)}
                         disabled={refreshingOrder === ord.orderNumber}
-                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                        className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-xl transition"
                         title="Perbarui Status Pesanan"
                       >
                         <RefreshCw
                           className={`w-4 h-4 ${
-                            refreshingOrder === ord.orderNumber ? "animate-spin text-amber-500" : ""
+                            refreshingOrder === ord.orderNumber ? "animate-spin text-amber-600" : ""
                           }`}
                         />
                       </button>
@@ -518,9 +507,9 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                     </div>
                   </div>
 
-                  {/* VISUAL STEPPER TRACKER */}
+                  {/* VISUAL STEPPER TRACKER (Friendly Customer Delivery Progression) */}
                   {!isCancelled && !isPending && (
-                    <div className="py-2 px-1 sm:px-3 bg-gradient-to-r from-amber-50/50 via-rose-50/30 to-purple-50/40 rounded-2xl border border-amber-100/70">
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50/60 via-orange-50/30 to-rose-50/40 border border-amber-100">
                       <div className="grid grid-cols-4 gap-1 sm:gap-2 relative">
                         {TRACKING_STEPS.map((step, idx) => {
                           const stepNumber = idx + 1;
@@ -530,18 +519,16 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
 
                           return (
                             <div key={step.key} className="flex flex-col items-center text-center relative z-10">
-                              {/* Step Icon Circle */}
                               <div
-                                className={`w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center text-xs transition-all shadow-sm ${
+                                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center transition-all ${
                                   isDone
-                                    ? "bg-gradient-to-tr from-amber-500 to-rose-500 text-white font-bold ring-2 ring-amber-200"
+                                    ? "bg-gradient-to-tr from-amber-500 to-rose-500 text-white shadow-sm ring-2 ring-amber-200"
                                     : "bg-white text-slate-300 border border-slate-200"
                                 } ${isCurrent ? "scale-105 ring-4 ring-amber-300 shadow-md animate-pulse" : ""}`}
                               >
-                                <IconComp className="w-4 h-4 sm:w-5 sm:h-5" />
+                                <IconComp className="w-5 h-5" />
                               </div>
 
-                              {/* Step Label */}
                               <span
                                 className={`text-[10px] sm:text-xs font-bold mt-2 leading-tight ${
                                   isDone ? "text-slate-900" : "text-slate-400"
@@ -549,66 +536,72 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                               >
                                 {step.title}
                               </span>
-                              <span className="hidden sm:block text-[9px] text-slate-400 mt-0.5 leading-tight">
-                                {step.desc}
-                              </span>
                             </div>
                           );
                         })}
                       </div>
 
-                      {/* Progress Line */}
-                      <div className="mt-3 px-6">
-                        <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                      {/* Progress Bar */}
+                      <div className="mt-3 px-5">
+                        <div className="h-1.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-amber-500 to-rose-500 rounded-full transition-all duration-500"
+                            className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-pink-500 rounded-full transition-all duration-700"
                             style={{
                               width: `${Math.min(100, Math.max(10, (currentStep / 4) * 100))}%`,
                             }}
                           />
                         </div>
                       </div>
+
+                      {/* Active Status Note */}
+                      <div className="mt-3 text-center">
+                        <span className="text-[11px] text-amber-900 font-medium bg-white/80 px-3 py-1 rounded-full border border-amber-200/70 inline-block shadow-2xs">
+                          {currentStep >= 1 && currentStep <= 4
+                            ? TRACKING_STEPS[currentStep - 1].customerNote
+                            : "Pesanan siap diproses"}
+                        </span>
+                      </div>
                     </div>
                   )}
 
-                  {/* Cancelled Banner */}
+                  {/* Cancelled Alert Box */}
                   {isCancelled && (
-                    <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 flex items-start gap-2.5 text-xs text-rose-800">
-                      <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 text-xs text-gray-700 flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                       <div>
-                        <strong className="block font-bold">Pesanan Telah Dibatalkan</strong>
-                        <p className="text-[11px] text-rose-700 mt-0.5 leading-relaxed">
-                          Pesanan ini telah dibatalkan oleh pihak toko. Stok dessert box telah dikembalikan secara otomatis. Silakan hubungi admin kami via WhatsApp jika ada pertanyaan mengenai pengembalian dana.
+                        <strong className="block font-bold text-gray-800">Pesanan Dibatalkan</strong>
+                        <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
+                          Pesanan ini telah dibatalkan. Jika Kakak membutuhkan bantuan atau pertanyaan terkait pesanan ini, silakan hubungi tim kami via WhatsApp ya!
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* Pending Banner */}
+                  {/* Pending Alert Box */}
                   {isPending && (
-                    <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 flex items-start gap-2.5 text-xs text-amber-800">
-                      <Clock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 flex items-start gap-2.5">
+                      <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                       <div>
                         <strong className="block font-bold">Menunggu Pembayaran</strong>
                         <p className="text-[11px] text-amber-700 mt-0.5 leading-relaxed">
-                          Selesaikan pembayaran Anda melalui Midtrans Snap agar pesanan dapat segera dipersiapkan oleh tim dapur kami.
+                          Yuk selesaikan pembayaranmu agar koki SweetLayers bisa segera menyiapkan dessert box favoritmu!
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* Items List */}
-                  <div className="space-y-1.5 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-100">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                      Menu yang Dipesan:
+                  {/* Items Receipt (Bakery Styled) */}
+                  <div className="p-3.5 bg-amber-50/40 rounded-2xl border border-amber-100/80 space-y-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
+                      Rincian Dessert Box:
                     </span>
                     {ord.items && ord.items.length > 0 ? (
                       ord.items.map((it, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-xs text-slate-700 py-1 border-b border-slate-100 last:border-none">
+                        <div key={idx} className="flex justify-between items-center text-xs text-slate-700 py-1 border-b border-amber-100/60 last:border-none">
                           <div>
                             <span className="font-semibold text-slate-900">{it.productName}</span>{" "}
-                            <span className="text-slate-500">({it.variantName})</span>{" "}
-                            <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 font-bold rounded text-[10px]">
+                            <span className="text-slate-500 text-[11px]">({it.variantName})</span>{" "}
+                            <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 font-bold rounded text-[10px]">
                               x{it.quantity}
                             </span>
                           </div>
@@ -618,13 +611,13 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                         </div>
                       ))
                     ) : (
-                      <div className="text-xs text-slate-500 italic">Detail pesanan dessert box</div>
+                      <div className="text-xs text-slate-500 italic">Detail pesanan dessert</div>
                     )}
                   </div>
 
-                  {/* Delivery & Schedule Information */}
+                  {/* Delivery & Schedule Info */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                    <div className="p-3 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-1.5">
+                    <div className="p-3 rounded-2xl bg-white border border-amber-100 space-y-1.5">
                       <div className="flex items-center gap-1.5 font-bold text-amber-900">
                         <Truck className="w-3.5 h-3.5 text-amber-600" />
                         <span>Pengiriman: {ord.deliveryMethod === "instant_courier" ? "Kurir Instan" : ord.deliveryMethod === "sameday" ? "Sameday" : "Ambil di Toko"}</span>
@@ -632,26 +625,20 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                       {ord.deliveryDate && (
                         <div className="flex items-center gap-1.5 text-slate-600 text-[11px]">
                           <Calendar className="w-3 h-3 text-slate-400" />
-                          <span>Tanggal: {ord.deliveryDate}</span>
-                        </div>
-                      )}
-                      {ord.deliveryTimeSlot && (
-                        <div className="flex items-center gap-1.5 text-slate-600 text-[11px]">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          <span>Slot: {ord.deliveryTimeSlot}</span>
+                          <span>Jadwal: {ord.deliveryDate} {ord.deliveryTimeSlot ? `(${ord.deliveryTimeSlot})` : ""}</span>
                         </div>
                       )}
                       {ord.deliveryAddress && (
-                        <div className="flex items-start gap-1.5 text-slate-600 text-[11px] pt-1 border-t border-amber-200/50">
+                        <div className="flex items-start gap-1.5 text-slate-600 text-[11px] pt-1 border-t border-amber-100">
                           <MapPin className="w-3 h-3 text-slate-400 mt-0.5 shrink-0" />
                           <span className="line-clamp-2">{ord.deliveryAddress}</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col justify-between">
+                    <div className="p-3 rounded-2xl bg-white border border-amber-100 flex flex-col justify-between">
                       <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">
                           Penerima Pesanan
                         </span>
                         <span className="font-bold text-slate-800 text-xs block">
@@ -660,8 +647,8 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                         <span className="text-slate-500 text-[11px] block">{ord.customerPhone}</span>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline mt-2">
-                        <span className="text-[10px] text-slate-500 font-semibold">Total Dibayar:</span>
+                      <div className="pt-2 border-t border-amber-100 flex justify-between items-baseline mt-2">
+                        <span className="text-[10px] text-slate-500 font-semibold">Total Pembayaran:</span>
                         <span className="font-mono text-sm font-black text-amber-900">
                           Rp {ord.totalAmount.toLocaleString("id-ID")}
                         </span>
@@ -669,63 +656,29 @@ export const CustomerOrdersModal: React.FC<CustomerOrdersModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Greeting Card if provided */}
+                  {/* Greeting Card if any */}
                   {ord.greetingCardText && (
                     <div className="p-3 rounded-2xl bg-rose-50/70 border border-rose-200/80 text-rose-900 text-xs flex items-start gap-2">
                       <span className="text-sm">💌</span>
                       <div>
-                        <strong className="font-bold text-rose-800">Kartu Ucapan Kado:</strong>
+                        <strong className="font-bold text-rose-800">Pesan Manis di Kartu Ucapan:</strong>
                         <p className="text-[11px] text-rose-700 italic mt-0.5">"{ord.greetingCardText}"</p>
                       </div>
                     </div>
                   )}
 
-                  {/* Actions Bar */}
-                  <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => checkMidtransProxyStatus(ord.orderNumber)}
-                      disabled={checkingProxy === ord.orderNumber}
-                      className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition font-medium flex items-center gap-1.5"
-                    >
-                      {checkingProxy === ord.orderNumber ? (
-                        <>
-                          <div className="w-3 h-3 border-2 border-slate-400 border-t-slate-700 rounded-full animate-spin" />
-                          <span>Cek Gateway...</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="w-3.5 h-3.5 text-slate-600" />
-                          <span>Status Gateway (Midtrans)</span>
-                        </>
-                      )}
-                    </button>
-
+                  {/* Friendly Customer Action: Contact Bakery via WhatsApp */}
+                  <div className="pt-2 flex justify-end">
                     <a
                       href={`https://wa.me/6281234567890?text=${whatsappMessage}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition font-bold flex items-center gap-1.5 shadow-xs"
+                      className="text-xs px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition font-bold flex items-center gap-1.5 shadow-xs"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
-                      <span>Chat WhatsApp Toko</span>
+                      <span>Chat WhatsApp Toko SweetLayers</span>
                     </a>
                   </div>
-
-                  {/* Midtrans Proxy Response details */}
-                  {proxyStatus[ord.orderNumber] && (
-                    <div className="p-3 bg-slate-900 text-slate-200 rounded-2xl text-[11px] font-mono overflow-x-auto">
-                      <div className="text-amber-400 font-bold mb-1 flex items-center justify-between">
-                        <span>Response Midtrans Proxy:</span>
-                        <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300">
-                          Status Code: {proxyStatus[ord.orderNumber].status_code || "200"}
-                        </span>
-                      </div>
-                      <pre className="text-[10px] leading-relaxed">
-                        {JSON.stringify(proxyStatus[ord.orderNumber], null, 2)}
-                      </pre>
-                    </div>
-                  )}
                 </div>
               );
             })
