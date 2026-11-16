@@ -85,14 +85,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Heart className="w-4 h-4 text-rose-400" />
               <span>Keunggulan Kami</span>
             </a>
-            <button
-              type="button"
-              onClick={onOpenOrders}
-              className="hover:text-amber-600 transition-colors flex items-center gap-1.5 font-medium text-slate-700"
-            >
-              <Truck className="w-4 h-4 text-amber-500" />
-              <span>Lacak Pesanan</span>
-            </button>
             {onOpenBusinessPlan && (
               <button
                 type="button"
